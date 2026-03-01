@@ -1,0 +1,44 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.30.0",
+    "bcrypt==4.0.1",
+    "email-validator>=2.3.0",
+    "fastapi>=0.129.0",
+    "logging>=0.4.9.6",
+    "passlib>=1.7.4",
+    "psycopg2-binary>=2.9.0",
+    "pydantic-settings>=2.13.1",
+    "pyjwt>=2.11.0",
+    "python-dotenv>=1.0.0",
+    "python-jose>=3.5.0",
+    "python-multipart>=0.0.22",
+    "slowapi>=0.1.9",
+    "sqlalchemy>=2.0.36",
+    "uvicorn>=0.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.1.0",
+    "flake8>=7.3.0",
+    "httpx>=0.28.1",
+    "isort>=8.0.0",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.alembic]
+script_location = "alembic"
+prepend_sys_path = "."
+sqlalchemy_url = "postgresql+psycopg://postgres:postgres@db:5432/app_db"
+version_path_separator = "os"
+version_path = "%(year)d%(month).02d"
+
