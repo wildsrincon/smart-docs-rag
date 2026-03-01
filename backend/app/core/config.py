@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Fullstack Starter Kit"
 
     # Security
-    SECRET_KEY: str = "fullstack-fastapi-starter"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 

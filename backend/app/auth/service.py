@@ -11,14 +11,7 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..entities.user import User
-from ..exceptions import AuthenticationError
-from . import model
-
-# You would want to store this in an environment variable or a secret manager
-SECRET_KEY = "197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+from ..core.config import settings
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -47,12 +40,14 @@ def create_access_token(email: str, user_id: UUID, expires_delta: timedelta) -> 
         "id": str(user_id),
         "exp": datetime.now(timezone.utc) + expires_delta,
     }
-    return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def verify_token(token: str) -> model.TokenData:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         user_id: str = payload.get("id")
         return model.TokenData(user_id=user_id)
     except PyJWTError as e:
@@ -95,7 +90,7 @@ async def login_for_access_token(
     if not user:
         raise AuthenticationError()
     token = create_access_token(
-        user.email, user.id, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.email, user.id, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return model.Token(access_token=token, token_type="bearer")
 
@@ -106,6 +101,6 @@ async def login_simple(login_data: model.LoginRequest, db: AsyncSession) -> mode
     if not user:
         raise AuthenticationError()
     token = create_access_token(
-        user.email, user.id, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.email, user.id, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return model.Token(access_token=token, token_type="bearer")
