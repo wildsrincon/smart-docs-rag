@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary-50: oklch(0.984 0.003 247.858);
   --color-primary-100: oklch(0.96 0.012 247.858);
@@ -53,24 +55,36 @@
       opacity: 1;
     }
   }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
 }
 
 :root {
   --color-primary: rgb(14 165 233);
+  --app-bg: var(--color-slate-50);
+  --app-text: var(--color-slate-900);
+  --app-border: var(--color-slate-200);
+  --app-surface: white;
+  --app-surface-secondary: var(--color-slate-50);
+}
+
+.dark {
+  --app-bg: var(--color-slate-950);
+  --app-text: var(--color-slate-50);
+  --app-border: var(--color-slate-700);
+  --app-surface: var(--color-slate-900);
+  --app-surface-secondary: var(--color-slate-800);
 }
 
 body {
-  background-color: var(--color-slate-50);
-  color: var(--color-slate-900);
+  background-color: var(--app-bg);
+  color: var(--app-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: var(--color-slate-950);
-    color: var(--color-slate-50);
-  }
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 @keyframes slide-in-from-left {

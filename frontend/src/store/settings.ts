@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type Language = 'en' | 'es'
 export type FontSize = 'small' | 'medium' | 'large'
 
 export interface UserProfile {
@@ -11,6 +10,13 @@ export interface UserProfile {
   email: string
   avatar_url: string | null
   bio: string
+}
+
+export interface SocialProfile {
+  linkedin: string
+  twitter: string
+  github: string
+  instagram: string
 }
 
 export interface SessionInfo {
@@ -25,7 +31,6 @@ export interface SessionInfo {
 
 export interface UserPreferences {
   theme: Theme
-  language: Language
   font_size: FontSize
   animations: boolean
   notifications: boolean
@@ -39,6 +44,7 @@ export interface PrivacySettings {
 export interface SettingsState {
   profile: UserProfile
   preferences: UserPreferences
+  social_profiles: SocialProfile
   sessions: SessionInfo[]
   privacy: PrivacySettings
   remember_device: boolean
@@ -47,12 +53,12 @@ export interface SettingsState {
   message: { type: 'success' | 'error' | 'warning'; text: string } | null
 
   setTheme: (theme: Theme) => void
-  setLanguage: (language: Language) => void
   setFontSize: (size: FontSize) => void
   setAnimations: (enabled: boolean) => void
   setNotifications: (enabled: boolean) => void
   updateProfile: (profile: Partial<UserProfile>) => void
   setAvatar: (url: string | null) => void
+  setSocialProfile: (profiles: SocialProfile) => void
   setPrivacy: (settings: Partial<PrivacySettings>) => void
   setRememberDevice: (remember: boolean) => void
   logoutOtherSessions: (sessionIds: string[]) => void
@@ -106,13 +112,7 @@ function applyTheme(theme: Theme) {
 
 function applyFontSize(size: FontSize) {
   if (typeof document === 'undefined') return
-  const root = document.documentElement
-  root.dataset.fontSize = size
-}
-
-function applyLanguage(lang: Language) {
-  if (typeof document === 'undefined') return
-  document.documentElement.lang = lang
+  document.documentElement.dataset.fontSize = size
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -127,10 +127,15 @@ export const useSettingsStore = create<SettingsState>()(
       },
       preferences: {
         theme: 'system',
-        language: 'en',
         font_size: 'medium',
         animations: true,
         notifications: true,
+      },
+      social_profiles: {
+        linkedin: '',
+        twitter: '',
+        github: '',
+        instagram: '',
       },
       sessions: mockSessions,
       privacy: {
@@ -144,11 +149,6 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (theme: Theme) => {
         set((s) => ({ preferences: { ...s.preferences, theme } }))
         applyTheme(theme)
-      },
-
-      setLanguage: (language: Language) => {
-        set((s) => ({ preferences: { ...s.preferences, language } }))
-        applyLanguage(language)
       },
 
       setFontSize: (size: FontSize) => {
@@ -170,6 +170,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setAvatar: (url: string | null) => {
         set((s) => ({ profile: { ...s.profile, avatar_url: url } }))
+      },
+
+      setSocialProfile: (profiles: SocialProfile) => {
+        set({ social_profiles: profiles })
       },
 
       setPrivacy: (settings: Partial<PrivacySettings>) => {
@@ -225,6 +229,7 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (state) => ({
         profile: state.profile,
         preferences: state.preferences,
+        social_profiles: state.social_profiles,
         privacy: state.privacy,
         remember_device: state.remember_device,
       }),
@@ -232,7 +237,6 @@ export const useSettingsStore = create<SettingsState>()(
         if (state) {
           applyTheme(state.preferences.theme)
           applyFontSize(state.preferences.font_size)
-          applyLanguage(state.preferences.language)
         }
       },
     }

@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Menu, Settings, LogOut, User, ChevronDown, Zap } from 'lucide-react'
+import { Menu, Settings, LogOut, User, ChevronDown, Zap, Sun, Moon } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
+import { useSettingsStore } from '@/store/settings'
 import { useSidebar } from './SidebarContext'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +13,8 @@ export default function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAuthStore()
+  const theme = useSettingsStore((s) => s.preferences.theme)
+  const setTheme = useSettingsStore((s) => s.setTheme)
   const { toggle } = useSidebar()
   const router = useRouter()
 
@@ -27,10 +30,25 @@ export default function Header() {
     }
   }, [userMenuOpen])
 
-  const handleLogout = async () => {
+  function handleLogout() {
     setUserMenuOpen(false)
-    await logout()
+    logout()
     router.push('/')
+  }
+
+  function toggleTheme() {
+    if (theme === 'dark') {
+      setTheme('light')
+    } else {
+      setTheme('dark')
+    }
+  }
+
+  function isDark() {
+    if (theme === 'system') {
+      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+    return theme === 'dark'
   }
 
   const initials = user
@@ -58,13 +76,34 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Link
-          href="/settings"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          title="Settings"
+        <button
+          onClick={toggleTheme}
+          className={cn(
+            'flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-300',
+            'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+            'dark:hover:bg-slate-800 dark:hover:text-slate-300',
+          )}
+          title={isDark() ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          <Settings className="h-5 w-5" />
-        </Link>
+          <span className="relative h-5 w-5">
+            <Sun
+              className={cn(
+                'absolute inset-0 h-5 w-5 transition-all duration-300',
+                isDark()
+                  ? 'rotate-90 scale-0 opacity-0'
+                  : 'rotate-0 scale-100 opacity-100',
+              )}
+            />
+            <Moon
+              className={cn(
+                'absolute inset-0 h-5 w-5 transition-all duration-300',
+                isDark()
+                  ? 'rotate-0 scale-100 opacity-100'
+                  : '-rotate-90 scale-0 opacity-0',
+              )}
+            />
+          </span>
+        </button>
 
         <div className="relative" ref={menuRef}>
           <button

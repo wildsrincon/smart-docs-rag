@@ -3,6 +3,7 @@ import type { Conversation, Message, Citation } from '@/types/api'
 import { chatApi } from '@/lib/rag-api'
 import WebSocketClient from '@/lib/websocket-client'
 import { detectLanguage } from '@/lib/language-detect'
+import { useLanguageStore } from '@/store/language'
 
 const STOP_WORDS = new Set([
   'that', 'this', 'what', 'which', 'where', 'when', 'with', 'from', 'have',
@@ -172,6 +173,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const detectedLang = detectLanguage(text)
+    useLanguageStore.getState().setDetectedLanguage(detectedLang)
     wsClient.sendUserQuery(text, documentId, currentConversationId, detectedLang)
   },
 
