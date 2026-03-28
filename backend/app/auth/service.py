@@ -12,6 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..auth import model
+from ..auth.google_oauth_service import GoogleOAuthService, get_google_oauth_service
+from ..entities.user import User
+from ..exceptions import AuthenticationError
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -34,11 +38,14 @@ async def authenticate_user(email: str, password: str, db: AsyncSession) -> User
     return user
 
 
-def create_access_token(email: str, user_id: UUID, expires_delta: timedelta) -> str:
+def create_access_token(
+    email: str, user_id: UUID, expires_delta: timedelta, provider: str = "manual"
+) -> str:
     encode = {
         "sub": email,
         "id": str(user_id),
         "exp": datetime.now(timezone.utc) + expires_delta,
+        "provider": provider,
     }
     return jwt.encode(encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -49,7 +56,8 @@ def verify_token(token: str) -> model.TokenData:
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         user_id: str = payload.get("id")
-        return model.TokenData(user_id=user_id)
+        provider: str = payload.get("provider", "manual")
+        return model.TokenData(user_id=user_id, provider=provider)
     except PyJWTError as e:
         logging.warning(f"Token verification failed: {str(e)}")
         raise AuthenticationError()
@@ -65,6 +73,7 @@ async def register_user(
             first_name=register_user_request.first_name,
             last_name=register_user_request.last_name,
             password_hash=get_password_hash(register_user_request.password),
+            provider="manual",
         )
         db.add(create_user_model)
         await db.commit()
@@ -80,9 +89,6 @@ def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]) -> model.Tok
     return verify_token(token)
 
 
-CurrentUser = Annotated[model.TokenData, Depends(get_current_user)]
-
-
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: AsyncSession
 ) -> model.Token:
@@ -90,9 +96,14 @@ async def login_for_access_token(
     if not user:
         raise AuthenticationError()
     token = create_access_token(
-        user.email, user.id, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.email,
+        user.id,
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        provider=user.provider or "manual",
     )
-    return model.Token(access_token=token, token_type="bearer")
+    return model.Token(
+        access_token=token, token_type="bearer", provider=user.provider or "manual"
+    )
 
 
 async def login_simple(login_data: model.LoginRequest, db: AsyncSession) -> model.Token:
@@ -101,6 +112,86 @@ async def login_simple(login_data: model.LoginRequest, db: AsyncSession) -> mode
     if not user:
         raise AuthenticationError()
     token = create_access_token(
-        user.email, user.id, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.email,
+        user.id,
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        provider=user.provider or "manual",
     )
-    return model.Token(access_token=token, token_type="bearer")
+    return model.Token(
+        access_token=token, token_type="bearer", provider=user.provider or "manual"
+    )
+
+
+async def google_oauth_login(
+    google_service: GoogleOAuthService,
+) -> model.GoogleLoginUrlResponse:
+    """
+    Generate Google OAuth authorization URL
+
+    Args:
+        google_service: Google OAuth service instance
+
+    Returns:
+        GoogleLoginUrlResponse with authorization URL and state token
+    """
+    auth_url, state = google_service.generate_authorization_url()
+    return model.GoogleLoginUrlResponse(authorization_url=auth_url, state=state)
+
+
+async def handle_google_callback(
+    code: str,
+    state: str,
+    db: AsyncSession,
+    google_service: GoogleOAuthService,
+) -> model.OAuthTokenResponse:
+    """
+    Handle Google OAuth callback and return JWT token
+
+    Args:
+        code: Authorization code from Google
+        state: State token for CSRF protection
+        db: Database session
+        google_service: Google OAuth service instance
+
+    Returns:
+        OAuthTokenResponse with JWT access token
+    """
+    # Exchange code for token
+    token_response = await google_service.exchange_code_for_token(code, state)
+
+    # Get user info from Google
+    google_user = await google_service.get_user_info(token_response.access_token)
+
+    # Find or create user
+    user = await google_service.find_or_create_user(google_user, db)
+
+    # Generate JWT token
+    token = create_access_token(
+        user.email,
+        user.id,
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        provider="google",
+    )
+
+    logging.info(f"Google OAuth login successful for user: {user.email}")
+
+    return model.OAuthTokenResponse(
+        access_token=token, token_type="bearer", provider="google"
+    )
+
+
+async def unlink_google_account(
+    user_id: UUID,
+    db: AsyncSession,
+    google_service: GoogleOAuthService,
+) -> None:
+    """
+    Unlink Google account from user
+
+    Args:
+        user_id: User ID
+        db: Database session
+        google_service: Google OAuth service instance
+    """
+    await google_service.unlink_google_account(user_id, db)
+    logging.info(f"Google account unlinked for user_id: {user_id}")

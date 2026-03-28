@@ -1,6 +1,7 @@
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
@@ -8,8 +9,10 @@ from fastapi.security import (
 )
 from starlette import status
 
+from ..core.config import settings
 from ..database.core import AsyncSession, get_db
 from ..rate_limiter import limiter
+from ..auth.google_oauth_service import get_google_oauth_service
 from . import model, service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -59,7 +62,7 @@ async def login_user_simple(
     Simple login endpoint that accepts JSON body.
 
     This works better with Swagger UI and other HTTP clients.
-    Alternative to the OAuth2PasswordRequestForm based /auth/login endpoint.
+    Alternative to OAuth2PasswordRequestForm based /auth/login endpoint.
     """
     return await service.login_simple(login_data, db)
 
@@ -92,11 +95,13 @@ async def verify_token_endpoint(
     Returns token payload information if valid, 401 if invalid.
     """
     try:
-        # Try to decode and verify the token
+        # Try to decode and verify token
         from jwt import PyJWTError, decode
 
         payload = decode(
-            credentials.credentials, service.SECRET_KEY, algorithms=[service.ALGORITHM]
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
         )
 
         return {
@@ -118,9 +123,85 @@ async def logout_user(db: DbSession, token: Annotated[str, Depends(security)]):
     Logout user endpoint.
 
     Since JWT is stateless, this is mainly for logging and client-side cleanup.
-    The client should discard the token from storage.
+    The client should discard token from storage.
     """
     return {
         "message": "Successfully logged out",
         "instruction": "Client should remove token from storage",
     }
+
+
+# Google OAuth endpoints
+
+
+@router.get("/google/login", response_model=model.GoogleLoginUrlResponse)
+@limiter.limit("5/minute")
+async def google_oauth_login(
+    request: Request,
+    google_service: Annotated[object, Depends(get_google_oauth_service)],
+):
+    """
+    Get Google OAuth authorization URL.
+
+    Returns an authorization URL that the user should visit to authenticate with Google.
+    The user will be redirected back to the redirect URI with an authorization code.
+    """
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Google OAuth is not configured",
+        )
+    return await service.google_oauth_login(google_service)
+
+
+@router.get("/google/callback", response_model=model.OAuthTokenResponse)
+@limiter.limit("5/minute")
+async def google_oauth_callback(
+    request: Request,
+    code: Annotated[str, Query(...)],
+    state: Annotated[str, Query(...)],
+    db: DbSession,
+    google_service: Annotated[object, Depends(get_google_oauth_service)],
+):
+    """
+    Handle Google OAuth callback.
+
+    Exchanges the authorization code for tokens and returns a JWT access token.
+    This endpoint is called by Google after user authentication.
+    """
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Google OAuth is not configured",
+        )
+    return await service.handle_google_callback(code, state, db, google_service)
+
+
+@router.delete("/google/unlink", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+async def unlink_google_account(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    db: DbSession,
+    google_service: Annotated[object, Depends(get_google_oauth_service)],
+):
+    """
+    Unlink Google account from user.
+
+    Requires the user to have a password set, as they'll need to authenticate manually
+    after unlinking. Users without a password cannot unlink their Google account.
+    """
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Google OAuth is not configured",
+        )
+
+    # Get user ID from token
+    token_data = service.verify_token(credentials.credentials)
+    if not token_data.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+
+    await service.unlink_google_account(UUID(token_data.user_id), db, google_service)
