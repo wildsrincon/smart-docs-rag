@@ -20,6 +20,10 @@ class ConversationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConversationTitleUpdate(BaseModel):
+    title: str
+
+
 class MessageCreate(BaseModel):
     conversation_id: UUID
     role: MessageRole

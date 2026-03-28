@@ -114,6 +114,26 @@ export const chatApi = {
     })
     return response.data
   },
+
+  deleteConversation: async (id: string, token: string) => {
+    const response = await api.delete(`/chat/conversations/${id}`, {
+      params: { token },
+    })
+    return response.status === 204
+  },
+
+  updateConversationTitle: async (
+    id: string,
+    title: string,
+    token: string
+  ) => {
+    const response = await api.put(
+      `/chat/conversations/${id}/title`,
+      { title },
+      { params: { token } }
+    )
+    return response.data
+  },
 }
 
 export default api

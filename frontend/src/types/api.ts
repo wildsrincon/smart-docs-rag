@@ -166,6 +166,7 @@ export interface UserQueryData {
   text: string
   document_id?: string
   conversation_id?: string
+  language?: string
 }
 
 export interface UserQueryMessage extends BaseWSMessage {

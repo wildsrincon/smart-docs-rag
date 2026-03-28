@@ -15,6 +15,7 @@ class UserQueryData(BaseModel):
     text: str
     document_id: Optional[UUID] = None
     conversation_id: Optional[UUID] = None
+    language: Optional[str] = None
 
 
 class UserQueryMessage:

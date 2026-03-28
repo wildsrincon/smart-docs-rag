@@ -15,7 +15,12 @@ from fastapi import (
 from uuid import UUID
 
 from app.auth.service import verify_token
-from app.chat.model import ConversationCreate, ConversationResponse, ChatHistoryResponse
+from app.chat.model import (
+    ConversationCreate,
+    ConversationResponse,
+    ConversationTitleUpdate,
+    ChatHistoryResponse,
+)
 from app.chat.service import ChatService
 from app.database.core import AsyncSession, get_db
 from app.rag.websocket_handler import websocket_handler
@@ -77,6 +82,41 @@ async def get_conversation_history(
     if messages is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return ChatHistoryResponse(conversation_id=conversation_id, messages=messages)
+
+
+@router.put(
+    "/conversations/{conversation_id}/title",
+    response_model=ConversationResponse,
+)
+async def update_conversation_title(
+    db: DbSession,
+    conversation_id: UUID,
+    body: ConversationTitleUpdate,
+    token: str = Query(...),
+):
+    """Update a conversation's title"""
+    token_data = verify_token(token)
+    user_id = UUID(token_data.user_id)
+    conversation = await chat_service.update_conversation_title(
+        db, conversation_id, user_id, body.title
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
+
+
+@router.delete(
+    "/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_conversation(
+    db: DbSession, conversation_id: UUID, token: str = Query(...)
+):
+    """Delete a conversation and its messages"""
+    token_data = verify_token(token)
+    user_id = UUID(token_data.user_id)
+    deleted = await chat_service.delete_conversation(db, conversation_id, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 @router.websocket("/ws")
