@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Conversation, Message, Citation } from '@/types/api'
 import { chatApi } from '@/lib/rag-api'
 import WebSocketClient from '@/lib/websocket-client'
+import { getInitialLanguage, type LanguageCode } from '@/components/chat/LanguageSelector'
 
 interface ChatState {
   conversations: Conversation[]
@@ -12,6 +13,7 @@ interface ChatState {
   isProcessing: boolean
   isConnected: boolean
   error: string | null
+  language: LanguageCode
 
   // WebSocket client
   wsClient: WebSocketClient | null
@@ -27,6 +29,7 @@ interface ChatState {
   clearCurrentResponse: () => void
   clearError: () => void
   deleteConversation: (id: string) => Promise<void>
+  setLanguage: (language: LanguageCode) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -39,6 +42,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isConnected: false,
   error: null,
   wsClient: null,
+  language: getInitialLanguage(),
 
   fetchConversations: async () => {
     try {
@@ -89,7 +93,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string, documentId?: string) => {
-    const { currentConversationId, wsClient } = get()
+    const { currentConversationId, wsClient, language } = get()
 
     if (!currentConversationId) {
       // Create new conversation if none exists
@@ -125,7 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
 
     // Send message via WebSocket
-    wsClient.sendUserQuery(text, documentId, currentConversationId)
+    wsClient.sendUserQuery(text, documentId, currentConversationId, language)
   },
 
   connectWebSocket: () => {
@@ -242,5 +246,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ error: 'Failed to delete conversation' })
       throw error
     }
+  },
+
+  setLanguage: (language: LanguageCode) => {
+    set({ language })
   },
 }))

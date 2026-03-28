@@ -154,29 +154,45 @@ class ChatService:
         context = "\n".join(context_parts)
         return context, citations
 
-    def format_messages(self) -> ChatPromptTemplate:
+    def format_messages(self, language: str = "en") -> ChatPromptTemplate:
         """
         Format messages for LangChain prompt.
+
+        Args:
+            language: Language code for LLM response (e.g., "en", "es")
 
         Returns:
             Formatted ChatPromptTemplate with context, query, and history as variables
         """
-        system_prompt = """You are a helpful assistant that answers questions based on the provided document sources.
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+        }
+        lang_instruction = language_instructions.get(
+            language, language_instructions["en"]
+        )
+
+        system_prompt = f"""You are a helpful assistant that answers questions based on the provided document sources.
 Use only the information from the sources to answer. If the sources don't contain the answer, say so clearly.
-Be concise and accurate. When referencing information, mention the document name naturally in your response (e.g., "Según el documento X..." or "En el archivo Y se indica que..."). Do NOT use [Source N] or numbered citation brackets. Instead, weave the source names into your prose naturally. If multiple sources are relevant, mention each one. At the end of your response, add a "Fuentes" section listing the documents you referenced."""
+Be concise and accurate. When referencing information, mention the document name naturally in your response (e.g., "According to document X..." or "In file Y it indicates that..."). Do NOT use [Source N] or numbered citation brackets. Instead, weave the source names into your prose naturally. If multiple sources are relevant, mention each one. At the end of your response, add a "Sources" section listing the documents you referenced.
+{lang_instruction}"""
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 MessagesPlaceholder(variable_name="history", optional=True),
-                ("human", "Fuentes:\n{context}\n\nPregunta: {query}"),
+                ("human", "Sources:\n{context}\n\nQuestion: {query}"),
             ]
         )
 
         return prompt
 
     async def generate_response_stream(
-        self, query: str, context: str, conversation_history: List[dict] | None = None
+        self,
+        query: str,
+        context: str,
+        conversation_history: List[dict] | None = None,
+        language: str = "en",
     ) -> AsyncIterator[str]:
         """
         Generate streaming response using LangChain.
@@ -185,12 +201,13 @@ Be concise and accurate. When referencing information, mention the document name
             query: User query
             context: Assembled context
             conversation_history: Optional conversation history
+            language: Language code for LLM response
 
         Yields:
             Response tokens
         """
         try:
-            prompt = self.format_messages()
+            prompt = self.format_messages(language)
 
             chain = prompt | self.chat_llm | StrOutputParser()
 
@@ -217,6 +234,7 @@ Be concise and accurate. When referencing information, mention the document name
         document_ids: Optional[List[UUID]] = None,
         conversation_history: Optional[List[dict]] = None,
         top_k: int = 10,
+        language: str = "en",
     ) -> dict:
         """
         Complete RAG pipeline: retrieve -> assemble -> generate.
@@ -228,6 +246,7 @@ Be concise and accurate. When referencing information, mention the document name
             document_ids: Optional document filter
             conversation_history: Optional conversation history
             top_k: Number of chunks to retrieve
+            language: Language code for LLM response
 
         Returns:
             Dict with citations and streaming function
@@ -251,7 +270,7 @@ Be concise and accurate. When referencing information, mention the document name
                 logger.warning("No relevant chunks found")
                 return {
                     "citations": [],
-                    "stream": self._generate_no_context_response(query),
+                    "stream": self._generate_no_context_response(query, language),
                 }
 
             # Step 3: Assemble context
@@ -262,7 +281,9 @@ Be concise and accurate. When referencing information, mention the document name
 
             # Step 4: Generate streaming response
             logger.info("Generating response...")
-            stream = self.generate_response_stream(query, context, conversation_history)
+            stream = self.generate_response_stream(
+                query, context, conversation_history, language
+            )
 
             return {"citations": citations, "stream": stream}
 
@@ -270,7 +291,12 @@ Be concise and accurate. When referencing information, mention the document name
             logger.error(f"Error in answer_question: {e}")
             raise
 
-    async def _generate_no_context_response(self, query: str) -> AsyncIterator[str]:
+    async def _generate_no_context_response(
+        self, query: str, language: str = "en"
+    ) -> AsyncIterator[str]:
         """Generate response when no relevant context is found"""
-        response = "I couldn't find relevant information in the documents to answer your question. Please try rephrasing or upload additional documents."
-        yield response
+        messages = {
+            "en": "I couldn't find relevant information in the documents to answer your question. Please try rephrasing or upload additional documents.",
+            "es": "No pude encontrar información relevante en los documentos para responder a tu pregunta. Intenta reformularla o sube documentos adicionales.",
+        }
+        yield messages.get(language, messages["en"])

@@ -105,7 +105,7 @@ export class WebSocketClient {
     }
   }
 
-  sendUserQuery(text: string, documentId?: string, conversationId?: string): void {
+  sendUserQuery(text: string, documentId?: string, conversationId?: string, language?: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket not connected')
       return
@@ -117,6 +117,7 @@ export class WebSocketClient {
         text,
         document_id: documentId,
         conversation_id: conversationId,
+        language,
       },
     }
 

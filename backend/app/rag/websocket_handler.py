@@ -181,8 +181,9 @@ class WebSocketHandler:
             )
 
             # Get RAG response
+            language = data.language or "en"
             response_data = await self.chat_service.answer_question(
-                db, user_id, data.text, document_ids, history
+                db, user_id, data.text, document_ids, history, language=language
             )
 
             # Stream assistant response
