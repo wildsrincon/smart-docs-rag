@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText, MessageSquare, TrendingUp } from 'lucide-react'
+import { FileText, MessageSquare, TrendingUp, BarChart3 } from 'lucide-react'
 import StatsCard from '@/components/StatsCard'
 
 interface Stats {
@@ -15,12 +15,12 @@ interface StatsGridProps {
 }
 
 export default function StatsGrid({ stats }: StatsGridProps) {
-  const processingRate = stats.totalDocuments > 0 
-    ? Math.round((stats.processedDocuments / stats.totalDocuments) * 100) 
+  const processingRate = stats.totalDocuments > 0
+    ? Math.round((stats.processedDocuments / stats.totalDocuments) * 100)
     : 0
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatsCard
         title="Total Documents"
         value={stats.totalDocuments}
@@ -43,8 +43,8 @@ export default function StatsGrid({ stats }: StatsGridProps) {
       <StatsCard
         title="Total Queries"
         value={stats.totalQueries}
-        icon={MessageSquare}
-        color="orange"
+        icon={BarChart3}
+        color="indigo"
       />
     </div>
   )
