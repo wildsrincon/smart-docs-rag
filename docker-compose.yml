@@ -1,7 +1,7 @@
 # docker-compose.yml
 services:
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: pg_starter_db
     environment:
       POSTGRES_USER: postgres
@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -25,16 +26,40 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/app_db
       POSTGRES_SERVER: db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: app_db
+      # Security
+      SECRET_KEY: dev-secret-key-change-in-production-do-not-use-in-production
+      # OpenAI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      OPENAI_CHAT_MODEL: gpt-4o-mini
+      # RAG Configuration
+      CHUNK_MIN_TOKENS: 500
+      CHUNK_MAX_TOKENS: 800
+      CHUNK_OVERLAP_RATIO: 0.2
+      TOP_K_RESULTS: 10
+      SIMILARITY_THRESHOLD: 0.2
+      # Document Processing
+      MAX_FILE_SIZE_MB: 10
+      SUPPORTED_FILE_EXTENSIONS: pdf,docx,xlsx,xls,pptx,txt,md
+      # Rate Limiting
+      MAX_UPLOADS_PER_MINUTE: 10
+      MAX_CHAT_QUERIES_PER_MINUTE: 60
+      # Google OAuth Configuration
+      GOOGLE_CLIENT_ID: 828519900748-fatb6685t5k8e5cmq4jose6skf7qemhr.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: http://localhost:3000/auth/callback/google
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   frontend:
     build:
@@ -43,12 +68,13 @@ services:
     container_name: nextjs_frontend
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      - /app/.next
 
   # Puedes agregar redis aquí para el Proyecto 2
   # redis:
