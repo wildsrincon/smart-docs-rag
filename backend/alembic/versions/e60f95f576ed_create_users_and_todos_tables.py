@@ -65,3 +65,7 @@ def downgrade() -> None:
     # Drop users table
     op.drop_index(op.f("ix_users_email"), table_name="users")
     op.drop_table("users")
+
+    # Drop enum type
+    priority_enum = postgresql.ENUM(name="priority")
+    priority_enum.drop(op.get_bind())
