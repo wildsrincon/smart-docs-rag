@@ -26,6 +26,7 @@ interface ChatState {
   updateCurrentResponse: (token: string, done: boolean, citations?: Citation[]) => void
   clearCurrentResponse: () => void
   clearError: () => void
+  deleteConversation: (id: string) => Promise<void>
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -217,5 +218,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  deleteConversation: async (id: string) => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) throw new Error('No token found')
+
+      await chatApi.deleteConversation(id, token)
+      set((state) => {
+        const newMessages = { ...state.messages }
+        delete newMessages[id]
+        return {
+          conversations: state.conversations.filter((c) => c.id !== id),
+          messages: newMessages,
+          currentConversationId:
+            state.currentConversationId === id ? null : state.currentConversationId,
+        }
+      })
+    } catch (error) {
+      console.error('Failed to delete conversation:', error)
+    }
   },
 }))

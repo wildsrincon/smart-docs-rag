@@ -11,6 +11,48 @@
   --color-primary-700: oklch(0.42 0.16 247.858);
   --color-primary-800: oklch(0.37 0.13 247.858);
   --color-primary-900: oklch(0.32 0.11 247.858);
+
+  --animate-in: enter 0.2s ease-out;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-in-from-bottom-1: slide-in-from-bottom 0.3s ease-out;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slide-in-from-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes typing-bounce {
+    0%, 60%, 100% {
+      transform: translateY(0);
+      opacity: 0.4;
+    }
+    30% {
+      transform: translateY(-6px);
+      opacity: 1;
+    }
+  }
 }
 
 :root {
@@ -42,4 +84,9 @@ body {
 
 .animate-in.slide-in-from-left {
   animation: slide-in-from-left 0.2s ease-out;
+}
+
+.typing-dot {
+  display: inline-block;
+  animation: typing-bounce 1.4s infinite ease-in-out;
 }
