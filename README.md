@@ -1,328 +1,181 @@
-# Fullstack Starter Kit
+# Smart Docs RAG
 
-A modern fullstack boilerplate with **Next.js 15** and **FastAPI**, following best practices for both frontend and backend development.
+Una plataforma de chat inteligente con documentos basada en RAG (Retrieval-Augmented Generation) que permite conversar con tus documentos PDF, DOCX, TXT y más.
 
-## 🚀 Features
+## 🚀 Características
 
-### Frontend (Next.js 15)
-- ✨ Modern React 19 with App Router
-- 🎨 Tailwind CSS 4 with dark mode
-- 🔐 JWT Authentication (Login/Signup)
-- 📦 Zustand 5 for state management
-- ✅ Todo CRUD operations
-- 🎯 Form validation with Zod 4 + React Hook Form
-- 📱 Responsive design
-- 🛡️ Protected routes with middleware
+- **Chat con documentos** - Preguntas y respuestas sobre tus documentos usando IA
+- **Búsqueda semántica** - Recuperación inteligente usando embeddings
+- **Soporte multi-formato** - PDF, DOCX, XLSX, PPTX, TXT, MD
+- **Autenticación OAuth** - Login con Google
+- **Interface moderna** - Sidebar fijo y header responsive
+- **Streaming en tiempo real** - Respuestas del chat en tiempo real con WebSocket
 
-### Backend (FastAPI)
-- ⚡ FastAPI with async/await
-- 🐘 PostgreSQL database
-- 🔄 SQLAlchemy async ORM
-- 📝 Pydantic V2 validation
-- 🔒 Password hashing with bcrypt
-- 🎫 JWT token authentication
-- 📊 Rate limiting
-- 🔒 CORS configuration
-- ✅ Full CRUD for todos
-- 🧪 Comprehensive tests with pytest
-
-## 📋 Tech Stack
-
-### Frontend
-```
-Next.js 15      → React framework
-React 19        → UI library
-TypeScript      → Type safety
-Tailwind CSS 4  → Styling
-Zustand 5       → State management
-Zod 4           → Validation
-Axios           → HTTP client
-Lucide React    → Icons
-```
+## 🛠️ Tech Stack
 
 ### Backend
-```
-FastAPI         → Web framework
-PostgreSQL      → Database
-SQLAlchemy      → ORM
-Pydantic V2     → Data validation
-bcrypt          → Password hashing
-JWT             → Authentication
-pytest          → Testing
-```
+- FastAPI - Framework web asíncrono
+- PostgreSQL con pgvector - Base de datos vectorial
+- OpenAI API - Embeddings y chat GPT-4
+- LangChain - Orquestación de RAG
+- Python 3.12+ - Lenguaje principal
 
-## 🏗️ Project Structure
+### Frontend
+- Next.js 15 - Framework React con App Router
+- React 19 - Biblioteca UI
+- TypeScript - Type safety
+- Tailwind CSS 4 - Estilos
+- Playwright - Tests E2E
 
-```
-fullstack-starter-kit/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── api/v1/         # API routes
-│   │   ├── auth/           # Authentication logic
-│   │   ├── users/          # User management
-│   │   ├── todos/          # Todo CRUD
-│   │   ├── entities/       # Database models
-│   │   ├── database/       # DB connection
-│   │   └── core/           # Config & security
-│   ├── tests/              # Pytest tests
-│   ├── Dockerfile
-│   └── pyproject.toml
-│
-├── frontend/                # Next.js frontend
-│   ├── src/
-│   │   ├── app/            # App Router pages
-│   │   ├── components/     # React components
-│   │   ├── lib/            # Utilities & API client
-│   │   ├── store/          # Zustand stores
-│   │   └── types/          # TypeScript types
-│   ├── public/             # Static assets
-│   ├── Dockerfile
-│   ├── next.config.js
-│   └── package.json
-│
-├── docker-compose.yml       # Orchestrate all services
-└── README.md
-```
+## 📋 Requisitos previos
 
-## 🚀 Quick Start
+- Docker y Docker Compose instalados
+- Cuenta de Google (para OAuth)
+- API Key de OpenAI
 
-### Prerequisites
+## 🔧 Configuración
 
-- **Docker** and **Docker Compose**
-- **Node.js** 18+ (for local development)
-- **Python** 3.14+ (for local development)
-
-### Using Docker (Recommended)
-
-1. Clone the repository
+1. **Clonar el repositorio:**
 ```bash
-git clone <repository-url>
-cd fullstack-starter-kit
+git clone https://github.com/wildsrincon/smart-docs-rag.git
+cd smart-docs-rag
 ```
 
-2. Start all services
+2. **Configurar variables de entorno:**
+```bash
+# Copiar el archivo de ejemplo
+cp .env.example .env
+
+# Editar .env con tus credenciales:
+# - OPENAI_API_KEY: Tu API key de OpenAI
+# - GOOGLE_CLIENT_ID: Client ID de Google OAuth
+# - GOOGLE_CLIENT_SECRET: Client Secret de Google OAuth
+```
+
+3. **Iniciar los servicios:**
 ```bash
 docker-compose up -d
 ```
 
-3. Access the applications
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+4. **Configurar Google OAuth:**
+   - Ve a [Google Cloud Console](https://console.cloud.google.com/)
+   - Crea un nuevo proyecto
+   - Habilita Google Sign-In API
+   - Crea credenciales OAuth 2.0
+   - Agrega `http://localhost:3000/auth/callback/google` como authorized redirect URI
+   - Copia Client ID y Client Secret a `.env`
 
-### Local Development
+## 🚀 Ejecutar
 
-#### Backend
 ```bash
-cd backend
-# Install dependencies (using uv for speed)
-pip install uv
-uv sync
+# Iniciar todos los servicios
+docker-compose up -d
 
-# Activate virtual environment
-source .venv/bin/activate  # Linux/Mac
-# or
-.venv\Scripts\activate     # Windows
+# Ver logs
+docker-compose logs -f
 
-# Run database migrations (if needed)
-# Create tables via FastAPI or Alembic
-
-# Run development server
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Run tests
-pytest
+# Detener servicios
+docker-compose down
 ```
 
-#### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+Los servicios estarán disponibles en:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs (Swagger): http://localhost:8000/docs
+- PostgreSQL: localhost:5432
 
-# Fullstack Starter Kit
-
-A modern fullstack boilerplate with **Next.js** and **FastAPI**, featuring robust, persistent authentication and best practices for both frontend and backend development.
-
-## 🚀 Features
-
-### Frontend (Next.js)
-- ✨ **React 19** with App Router
-- 🎨 **Tailwind CSS** for styling
-- 🔐 **Robust JWT Authentication** with persistent sessions (Auth Guard pattern)
-- 🔄 **Automatic Session Restoration** on page reload
-- 📦 **Zustand** for global state management
-- ✅ **Todo CRUD** operations
-- 🎯 **Form Validation** with Zod + React Hook Form
-- 📱 Responsive design
-- 🛡️ **Protected Routes** with Next.js Middleware
-- 🤫 **Hydration Error Suppression** for browser extension compatibility
-
-### Backend (FastAPI)
-- ⚡ **FastAPI** with async/await
-- 🐘 **PostgreSQL** database with SQLAlchemy
-- 📝 **Pydantic V2** for robust data validation and parsing
-- 🔒 **Password Hashing** with `bcrypt`
-- 🎫 **JWT Token Authentication** (OAuth2 Password Flow)
-- 🛠️ **Swagger UI Friendly** JSON login endpoint for easy testing
-- 📊 Rate limiting and CORS configuration
-- ✅ Full CRUD for todos
-- 🧪 Comprehensive tests with Pytest
-
-## 🏗️ Project Structure
+## 📁 Estructura del proyecto
 
 ```
-fullstack-starter-kit/
-├── backend/
+smart-docs-rag/
+├── backend/               # API FastAPI
 │   ├── app/
-│   │   ├── api/v1/
-│   │   │   ├── api.py
-│   │   │   └── debug.py          # <-- Endpoints para testing fácil
-│   │   ├── auth/
-│   │   ├── users/
-│   │   ├── todos/
-│   │   └── ...
-│   └── ...
-│
-├── frontend/
+│   │   ├── api/          # Rutas API
+│   │   ├── auth/         # Autenticación
+│   │   ├── chat/         # Chat service
+│   │   ├── documents/    # Document upload
+│   │   ├── rag/          # RAG system
+│   │   └── entities/     # SQLAlchemy models
+│   ├── tests/            # Tests
+│   └── alembic/          # Migraciones DB
+├── frontend/             # Next.js App
 │   ├── src/
-│   │   ├── app/
-│   │   ├── components/
-│   │   │   ├── AuthProvider.tsx  # <-- Auth Guard para persistencia
-│   │   │   └── FullScreenLoader.tsx
-│   │   ├── store/
-│   │   │   └── auth.ts           # <-- Lógica de sesión robusta
-│   │   └── ...
-│   └── middleware.ts
-│
-├── docker-compose.yml
-├── README.md
-└── ... (otros archivos de documentación)
+│   │   ├── app/          # App Router
+│   │   ├── components/   # UI Components
+│   │   ├── lib/          # Utilities
+│   │   └── store/        # State management
+│   └── tests/            # E2E tests
+├── docker/               # Docker configs
+└── docker-compose.yml    # Docker Compose
 ```
 
-## 🔐 Authentication Flow (Robust Version)
+## 🔄 Flujo de trabajo
 
-This starter kit implements a robust "Auth Guard" pattern to ensure session persistence.
+### Branches
+- `main` - Rama de producción (protegida)
+- `dev` - Rama de desarrollo
+- `feat/*` - Branches de features
 
-1.  **Login**: User logs in. Token and user data are saved to `localStorage` via Zustand's `persist` middleware.
-2.  **Page Reload**:
-    *   `AuthProvider` component wraps the entire app.
-    *   It displays a full-screen loader, "pausing" the app render.
-    *   It calls `restoreSession()` from the auth store.
-    *   `restoreSession` verifies the token from `localStorage` against the backend API.
-    *   If valid, it fetches user data and sets the auth state.
-    *   The loader is removed, and the app renders with the user already logged in.
-3.  **Result**: No more redirects to login on page reload. The session is reliably persisted.
+### Flujo
+1. Crear feature branch desde `dev`:
+```bash
+git checkout dev
+git pull origin dev
+git checkout -b feat/nueva-feature
+```
 
-## 📖 API Endpoints
+2. Hacer cambios y commitear:
+```bash
+git add .
+git commit -m "feat: descripción del cambio"
+```
 
-### Authentication
-- `POST /api/v1/auth/login` - (OAuth2 Form) For clients.
-- `POST /api/v1/auth/login-simple` - (JSON) **For easy testing in Swagger UI**.
-- `POST /api/v1/auth/register`
-- `GET /api/v1/auth/verify`
+3. Hacer push y crear PR:
+```bash
+git push -u origin feat/nueva-feature
+gh pr create --title "feat: descripción" --body "detalles..."
+```
 
-### Debug (For easy testing)
-- `POST /api/v1/debug/login-simple` - Alternative JSON login.
-- `GET /api/v1/debug/test-auth`
+4. Hacer merge a `dev`:
+```bash
+# Después de revisión y aprobación
+gh pr merge --squash
+```
 
-### Users & Todos
-- `GET /api/v1/users/me`
-- `GET/POST/PUT/DELETE /api/v1/todos/...`
-- `GET /api/v1/todos/stats`
-
----
-*El resto del README (Tech Stack, Quick Start, etc.) sigue siendo válido y no necesita cambios.*
+5. Actualizar `dev` local:
+```bash
+git checkout dev
+git pull origin dev
+```
 
 ## 🧪 Testing
 
-### Backend Tests
 ```bash
-cd backend
-pytest                          # Run all tests
-pytest -v                        # Verbose output
-pytest tests/test_auth.py        # Specific test file
-pytest --cov                     # With coverage
+# Tests backend
+docker-compose exec backend pytest
+
+# Tests E2E
+docker-compose exec frontend npx playwright test
 ```
 
-### Frontend
-For E2E testing, you can use Playwright or Cypress (to be added).
+## 📖 Documentación
 
-## 🛠️ Development Tools
+- [API Docs](http://localhost:8000/docs) - Swagger UI
+- [RAG System](docs/rag.md) - Documentación del sistema RAG
+- [OAuth Setup](docs/oauth.md) - Guía de configuración OAuth
 
-### Backend
-- **FastAPI**: Automatic OpenAPI docs at `/docs`
-- **Pytest**: Testing framework
-- **ruff**: Fast Python linter
-- **mypy**: Type checking
+## 🤝 Contribuir
 
-### Frontend
-- **Next.js**: Hot reload, file-based routing
-- **React DevTools**: Debug components
-- **ESLint**: Code linting
-- **TypeScript**: Type checking (`npm run type-check`)
+1. Fork el repositorio
+2. Crear una feature branch
+3. Commitear cambios con conventional commits
+4. Hacer push a la branch
+5. Crear Pull Request
 
-## 📝 Key Patterns
+## 📄 Licencia
 
-### Backend: Clean Architecture
-- **Controllers** → Handle HTTP requests/responses
-- **Services** → Business logic
-- **Entities** → Database models
-- **Dependency Injection** → FastAPI Depends()
+MIT License
 
-### Frontend: Modern React
-- **Server Components** by default (no state/effects)
-- **Client Components** only when needed (marked with "use client")
-- **Zustand** for global state (no Context API)
-- **Zod** for runtime type validation
-- **No manual memoization** (React Compiler handles it)
+## 👥 Autores
 
-### State Management
-- **Auth Store**: User data, token, authentication state
-- **Todos Store**: Todo list, CRUD operations
-- **Persist Middleware**: Auth state saved across reloads
-- **Immer Middleware**: Immutable state updates
-
-## 🎨 Styling
-
-- **Tailwind CSS 4**: Utility-first CSS framework
-- **Dark Mode**: Automatic based on system preference
-- **Semantic Colors**: Primary, slate scales
-- **Responsive**: Mobile-first design
-
-## 🔒 Security
-
-- **JWT**: Secure token-based authentication
-- **Password Hashing**: bcrypt with salt
-- **Rate Limiting**: Prevent abuse
-- **CORS**: Configured for frontend origin
-- **Input Validation**: Pydantic schemas (backend) + Zod (frontend)
-
-## 🐳 Docker Services
-
-```yaml
-db:         PostgreSQL 15 (port 5432)
-backend:    FastAPI (port 8000)
-frontend:   Next.js (port 3000)
-```
-
-## 📚 Resources
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [FastAPI Documentation](https://fastapi.tiangolo.com)
-- [Zustand Documentation](https://zustand-demo.pmnd.rs)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [Zod Documentation](https://zod.dev)
-
-## 🤝 Contributing
-
-This is a starter kit. Feel free to fork and customize for your needs!
-
-## 📄 License
-
-MIT
-
----
-
-**Built with ❤️ using Next.js 15 and FastAPI**
+- @wildsrincon
