@@ -94,7 +94,7 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:block lg:w-64 lg:border-r lg:border-slate-200 lg:dark:border-slate-700/50">
+      <aside className="hidden lg:block lg:w-64 lg:shrink-0 lg:border-r lg:border-slate-200 lg:dark:border-slate-700/50">
         <SidebarContent onLogout={handleLogout} />
       </aside>
 
