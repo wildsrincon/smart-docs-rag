@@ -7,7 +7,6 @@ import { useDocumentStore } from '@/store/documents'
 import ChatSidebar from '@/components/chat/ChatSidebar'
 import MessageList from '@/components/chat/MessageList'
 import ChatInput from '@/components/chat/ChatInput'
-import LanguageSelector from '@/components/chat/LanguageSelector'
 import { cn } from '@/lib/utils'
 
 export default function ChatPage() {
@@ -28,7 +27,6 @@ export default function ChatPage() {
     deleteConversation,
     error,
     clearError,
-    setLanguage,
   } = useChatStore()
   const { selectedDocumentId, fetchDocuments } = useDocumentStore()
 
@@ -96,7 +94,6 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <LanguageSelector onChangeLang={setLanguage} />
             {selectedDocumentId && (
               <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 bg-primary-50 dark:bg-primary-900/20 dark:text-primary-400 px-2.5 py-1 rounded-full">
                 Document selected

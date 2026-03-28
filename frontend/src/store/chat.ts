@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Conversation, Message, Citation } from '@/types/api'
 import { chatApi } from '@/lib/rag-api'
 import WebSocketClient from '@/lib/websocket-client'
-import { getInitialLanguage, type LanguageCode } from '@/components/chat/LanguageSelector'
+import { detectLanguage } from '@/lib/language-detect'
 
 const STOP_WORDS = new Set([
   'that', 'this', 'what', 'which', 'where', 'when', 'with', 'from', 'have',
@@ -46,7 +46,6 @@ interface ChatState {
   isProcessing: boolean
   isConnected: boolean
   error: string | null
-  language: LanguageCode
 
   // WebSocket client
   wsClient: WebSocketClient | null
@@ -63,7 +62,6 @@ interface ChatState {
   clearError: () => void
   deleteConversation: (id: string) => Promise<void>
   updateConversationTitle: (conversationId: string, title: string) => Promise<void>
-  setLanguage: (language: LanguageCode) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -76,7 +74,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isConnected: false,
   error: null,
   wsClient: null,
-  language: getInitialLanguage(),
 
   fetchConversations: async () => {
     try {
@@ -127,7 +124,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string, documentId?: string) => {
-    const { currentConversationId, wsClient, language, messages } = get()
+    const { currentConversationId, wsClient, messages } = get()
 
     if (!currentConversationId) {
       await get().createConversation()
@@ -174,7 +171,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       get().updateConversationTitle(currentConversationId, title)
     }
 
-    wsClient.sendUserQuery(text, documentId, currentConversationId, language)
+    const detectedLang = detectLanguage(text)
+    wsClient.sendUserQuery(text, documentId, currentConversationId, detectedLang)
   },
 
   connectWebSocket: () => {
@@ -309,7 +307,4 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  setLanguage: (language: LanguageCode) => {
-    set({ language })
-  },
 }))
