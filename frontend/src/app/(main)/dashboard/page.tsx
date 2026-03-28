@@ -3,16 +3,18 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, MessageSquare } from 'lucide-react'
+import { FileText, MessageSquare, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useDocumentStore } from '@/store/documents'
 import { useChatStore } from '@/store/chat'
 import StatsGrid from '@/components/dashboard/StatsGrid'
+import StatsChart from '@/components/dashboard/StatsChart'
+import DocumentTable from '@/components/dashboard/DocumentTable'
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user, isAuthenticated, isLoading: authLoading } = useAuthStore()
-  const { documents, fetchDocuments } = useDocumentStore()
+  const { documents, fetchDocuments, deleteDocument } = useDocumentStore()
   const { conversations, fetchConversations } = useChatStore()
 
   useEffect(() => {
@@ -41,106 +43,88 @@ export default function DashboardPage() {
     totalQueries: 0,
   }
 
+  async function handleDelete(id: string) {
+    if (confirm('Are you sure you want to delete this document?')) {
+      await deleteDocument(id)
+    }
+  }
+
+  function handleView(id: string) {
+    router.push(`/chat?document=${id}`)
+  }
+
   return (
     <div className="px-4 py-8 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
             Welcome back, {user?.first_name}
           </h2>
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="mt-1 text-slate-500 dark:text-slate-400">
             Here&apos;s an overview of your SmartDocs activity
           </p>
         </div>
 
         <StatsGrid stats={stats} />
 
-        <div className="mt-8">
-          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-6">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Link href="/documents" className="group p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg transition-all border border-slate-200 dark:border-slate-700 hover:scale-[1.02]">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 group-hover:scale-110 transition-transform">
-                  <FileText className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900 dark:text-white mb-1">Upload Documents</h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Add new files to your library</p>
-                </div>
-              </div>
-            </Link>
+        <StatsChart />
 
-            <Link href="/chat" className="group p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg transition-all border border-slate-200 dark:border-slate-700 hover:scale-[1.02]">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900 dark:text-white mb-1">Start Chat</h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Chat with your documents</p>
-                </div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <Link href="/documents" className="group p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-200/80 dark:border-slate-800 hover:-translate-y-0.5">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 p-3 shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
+                <FileText className="w-6 h-6 text-white" />
               </div>
-            </Link>
-          </div>
+              <div>
+                <h4 className="font-semibold text-slate-900 dark:text-white">Upload Documents</h4>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Add new files to your library</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/chat" className="group p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-200/80 dark:border-slate-800 hover:-translate-y-0.5">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-gradient-to-br from-violet-500 to-purple-400 p-3 shadow-lg shadow-violet-500/20 group-hover:scale-110 transition-transform duration-300">
+                <MessageSquare className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-slate-900 dark:text-white">Start Chat</h4>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Chat with your documents</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/documents" className="group p-6 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl shadow-lg shadow-primary-500/20 hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-white/20 backdrop-blur-sm p-3 group-hover:scale-110 transition-transform duration-300">
+                <Sparkles className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-white">AI Assistant</h4>
+                <p className="mt-1 text-sm text-primary-100">Ask anything about your docs</p>
+              </div>
+            </div>
+          </Link>
         </div>
 
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Documents</h3>
-            <Link href="/documents" className="text-primary-600 hover:text-primary-700 font-medium text-sm">
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Recent Documents</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {documents.length} document{documents.length !== 1 ? 's' : ''} in your library
+              </p>
+            </div>
+            <Link href="/documents" className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors">
               View All &rarr;
             </Link>
           </div>
 
-          {documents.length === 0 ? (
-            <div className="text-center py-12 px-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 mb-4">
-                <FileText className="w-8 h-8 text-slate-400" />
-              </div>
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">No documents yet</p>
-              <p className="text-xs text-slate-500 dark:text-slate-500">
-                <Link href="/documents" className="text-primary-600 hover:underline">
-                  Upload your first document &rarr;
-                </Link>
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {documents.slice(0, 6).map((doc) => (
-                <div
-                  key={doc.id}
-                  className="p-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-lg transition-all border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700">
-                      <FileText className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate text-slate-900 dark:text-white">
-                        {doc.filename}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          doc.status === 'completed'
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                            : doc.status === 'processing'
-                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                        }`}>
-                          {doc.status}
-                        </span>
-                        {doc.processed_chunks > 0 && (
-                          <span className="text-xs text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
-                            {doc.processed_chunks} chunks
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <DocumentTable
+            documents={documents}
+            onDelete={handleDelete}
+            onView={handleView}
+          />
         </div>
       </div>
     </div>
