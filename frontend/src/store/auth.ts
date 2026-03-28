@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { User } from '@/types/api'
+import type { User, ProviderType, GoogleLoginUrlResponse } from '@/types/api'
 import { authApi, usersApi } from '@/lib/api'
 
 interface AuthState {
@@ -12,6 +12,7 @@ interface AuthState {
   isRestoring: boolean
 
   login: (email: string, password: string) => Promise<void>
+  loginWithGoogle: () => Promise<void>
   register: (data: {
     email: string
     password: string
@@ -87,6 +88,23 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             isAuthenticated: false,
             token: null,
+          })
+          throw error
+        }
+      },
+
+      loginWithGoogle: async () => {
+        set({ isLoading: true, error: null })
+        try {
+          const { authorization_url } = await authApi.googleLogin()
+          // Redirect to Google OAuth page
+          if (typeof window !== 'undefined') {
+            window.location.href = authorization_url
+          }
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : 'Google login failed',
+            isLoading: false,
           })
           throw error
         }

@@ -29,7 +29,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
+    // Don't redirect for Google OAuth callback (it's expected to handle errors)
+    const isGoogleCallback = error.config?.url?.includes('/auth/google/callback')
+
+    if (error.response?.status === 401 && !isGoogleCallback) {
       // Token expired or invalid
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
@@ -56,6 +59,23 @@ export const authApi = {
         'Content-Type': 'multipart/form-data',
       },
     })
+    return response.data
+  },
+
+  googleLogin: async () => {
+    const response = await api.get('/auth/google/login')
+    return response.data
+  },
+
+  googleCallback: async (code: string, state: string) => {
+    const response = await api.get('/auth/google/callback', {
+      params: { code, state },
+    })
+    return response.data
+  },
+
+  unlinkGoogle: async () => {
+    const response = await api.delete('/auth/google/unlink')
     return response.data
   },
 
