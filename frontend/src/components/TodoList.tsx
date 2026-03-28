@@ -3,7 +3,7 @@
 import { format } from 'date-fns'
 import { useTodosStore } from '@/store/todos'
 import { useShallow } from 'zustand/react/shallow'
-import { Check, Trash2, Calendar, AlertCircle, MoreVertical } from 'lucide-react'
+import { Check, Trash2, Calendar, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PRIORITY_COLORS = {
@@ -22,7 +22,16 @@ const PRIORITY_BORDERS = {
   Top: 'border-red-200 dark:border-red-800',
 }
 
-function TodoItem({ todo }: { todo: any }) {
+interface Todo {
+  id: string
+  description: string
+  priority: string
+  is_completed: boolean
+  due_date?: string | null
+  completed_at?: string | null
+}
+
+function TodoItem({ todo }: { todo: Todo }) {
   const { completeTodo, deleteTodo, isLoading } = useTodosStore()
 
   const handleComplete = async () => {
@@ -175,7 +184,7 @@ export default function TodoList() {
           No tasks yet
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-          Get started by creating your first task. It's quick and easy!
+          Get started by creating your first task. It&apos;s quick and easy!
         </p>
       </div>
     )

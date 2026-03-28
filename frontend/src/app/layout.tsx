@@ -6,8 +6,8 @@ import AuthProvider from '@/components/AuthProvider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Fullstack Starter Kit',
-  description: 'A modern fullstack starter with Next.js and FastAPI',
+  title: 'SmartDocs RAG Platform',
+  description: 'AI-powered document chat with RAG',
 }
 
 export default function RootLayout({

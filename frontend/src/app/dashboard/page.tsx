@@ -2,155 +2,169 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { FileText, MessageSquare, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { useTodosStore } from '@/store/todos'
-import { useStatsStore } from '@/store/stats'
-import StatsCard from '@/components/StatsCard'
-import PriorityChart from '@/components/PriorityChart'
-import TodoForm from '@/components/TodoForm'
-import TodoList from '@/components/TodoList'
-import { Loader2, TrendingUp, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
+import { useDocumentStore } from '@/store/documents'
+import { useChatStore } from '@/store/chat'
+import NavigationSidebar from '@/components/layouts/NavigationSidebar'
+import StatsGrid from '@/components/dashboard/StatsGrid'
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuthStore()
-  const { todos, isLoading: todosLoading, fetchTodos } = useTodosStore()
-  const { stats, isLoading: statsLoading, fetchStats } = useStatsStore()
+  const { documents, fetchDocuments } = useDocumentStore()
+  const { conversations, fetchConversations } = useChatStore()
 
   useEffect(() => {
-    // AuthProvider garantiza que este componente solo se renderice
-    // después de que se haya restaurado la sesión.
     if (!authLoading && !isAuthenticated) {
       router.push('/login')
       return
     }
-    
+
     if (isAuthenticated && user) {
-      // Cargar datos solo si está autenticado y el usuario existe
-      fetchStats()
-      if (todos.length === 0) {
-        fetchTodos()
-      }
+      fetchDocuments()
+      fetchConversations()
     }
-  }, [isAuthenticated, authLoading, user, router, fetchStats, fetchTodos, todos.length])
+  }, [isAuthenticated, authLoading, user, router, fetchDocuments, fetchConversations])
 
   const handleLogout = async () => {
     await logout()
     router.push('/')
   }
 
+  const stats = {
+    totalDocuments: documents.length,
+    processedDocuments: documents.filter(d => d.status === 'completed').length,
+    activeConversations: conversations.length,
+    totalQueries: 0, // TODO: Calculate from messages
+  }
+
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
       </div>
     )
   }
 
-  const completionRate = stats?.total
-    ? Math.round((stats.completed / stats.total) * 100)
-    : 0
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      {/* Header */}
-      <nav className="sticky top-0 z-50 border-b border-slate-200/50 bg-white/80 backdrop-blur-lg dark:border-slate-800/50 dark:bg-slate-900/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
+      <div className="hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:border-r lg:border-slate-200 dark:lg:border-slate-700 lg:bg-white lg:dark:bg-slate-800 lg:z-40">
+        <NavigationSidebar onLogout={handleLogout} />
+      </div>
+
+      <div className="lg:pl-64">
+        <div className="lg:hidden sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <div className="flex items-center justify-between px-4 py-4">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+            <button onClick={handleLogout} className="text-slate-600 dark:text-slate-400">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+              Welcome back, {user?.first_name}! 👋
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400">
+              Here&apos;s an overview of your SmartDocs activity
+            </p>
+          </div>
+
+          <StatsGrid stats={stats} />
+
+          <div className="mt-8">
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-6">Quick Actions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Link href="/documents" className="group p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg hover:shadow-xl transition-all border border-slate-200 dark:border-slate-700 hover:scale-105">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 group-hover:scale-110 transition-transform">
+                    <FileText className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900 dark:text-white mb-1">Upload Documents</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Add new PDFs to your library</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/chat" className="group p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg hover:shadow-xl transition-all border border-slate-200 dark:border-slate-700 hover:scale-105">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 group-hover:scale-110 transition-transform">
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900 dark:text-white mb-1">Start Chat</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Chat with your documents</p>
+                  </div>
+                </div>
+              </Link>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-slate-900 dark:text-white">
-                  {user?.first_name} {user?.last_name}
+          </div>
+
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Documents</h3>
+              <Link href="/documents" className="text-primary-600 hover:text-primary-700 font-medium">
+                View All →
+              </Link>
+            </div>
+            
+            {documents.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
+                  <FileText className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">No documents yet</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500">
+                  <Link href="/documents" className="text-primary-600 hover:underline">
+                    Upload your first document →
+                  </Link>
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
               </div>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Section */}
-        <div className="mb-8">
-          <h2 className="mb-4 text-2xl font-bold text-slate-900 dark:text-white">Overview</h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <StatsCard
-              title="Total Tasks"
-              value={stats?.total || 0}
-              icon={TrendingUp}
-              color="blue"
-            />
-            <StatsCard
-              title="Completed"
-              value={stats?.completed || 0}
-              icon={CheckCircle2}
-              color="green"
-            />
-            <StatsCard
-              title="Pending"
-              value={stats?.pending || 0}
-              icon={Clock}
-              color="orange"
-            />
-            <StatsCard
-              title="Completion Rate"
-              value={`${completionRate}%`}
-              icon={AlertCircle}
-              color="purple"
-              trend={{ value: 12, isPositive: true }}
-            />
-          </div>
-        </div>
-
-        {/* Charts and Form Section */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            {stats && !statsLoading && <PriorityChart data={stats.by_priority} />}
-          </div>
-
-          <div className="lg:col-span-2">
-            <TodoForm onSuccess={() => { fetchStats(); fetchTodos() }} />
-          </div>
-        </div>
-
-        {/* Todos Section */}
-        <div className="mt-8">
-          {stats?.completed_this_week !== undefined && stats.completed_this_week > 0 && (
-            <div className="mb-6 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white shadow-lg">
-              <div className="flex items-center gap-4">
-                <div className="rounded-full bg-white/20 p-3">
-                  <TrendingUp className="h-8 w-8" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium opacity-90">Great progress!</p>
-                  <p className="text-2xl font-bold">
-                    {stats.completed_this_week} tasks completed this week
-                  </p>
-                </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {documents.slice(0, 6).map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm hover:shadow-lg transition-all border border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700">
+                        <FileText className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate text-slate-900 dark:text-white">
+                          {doc.filename}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            doc.status === 'completed'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                              : doc.status === 'processing'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                          }`}>
+                            {doc.status}
+                          </span>
+                          {doc.processed_chunks > 0 && (
+                            <span className="text-xs text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                              {doc.processed_chunks} chunks
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-
-          <h2 className="mb-4 text-2xl font-bold text-slate-900 dark:text-white">Your Tasks</h2>
-          {todosLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-            </div>
-          ) : (
-            <TodoList />
-          )}
-        </div>
-      </main>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
