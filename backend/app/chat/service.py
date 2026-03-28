@@ -168,6 +168,30 @@ class ChatService:
             logger.error(f"Error deleting conversation: {e}")
             raise
 
+    async def update_conversation_title(
+        self, db: AsyncSession, conversation_id: UUID, user_id: UUID, title: str
+    ) -> Optional[ConversationResponse]:
+        """Update a conversation's title"""
+        try:
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.id == conversation_id)
+                .where(Conversation.user_id == user_id)
+            )
+            conversation = result.scalar_one_or_none()
+            if not conversation:
+                return None
+
+            conversation.title = title
+            await db.flush()
+
+            logger.info(f"Updated conversation title: {conversation_id} -> {title}")
+            return ConversationResponse.model_validate(conversation)
+
+        except Exception as e:
+            logger.error(f"Error updating conversation title: {e}")
+            raise
+
     def format_history_for_langchain(
         self, messages: List[MessageResponse]
     ) -> List[dict]:

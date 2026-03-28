@@ -4,6 +4,39 @@ import { chatApi } from '@/lib/rag-api'
 import WebSocketClient from '@/lib/websocket-client'
 import { getInitialLanguage, type LanguageCode } from '@/components/chat/LanguageSelector'
 
+const STOP_WORDS = new Set([
+  'that', 'this', 'what', 'which', 'where', 'when', 'with', 'from', 'have',
+  'does', 'will', 'would', 'could', 'should', 'about', 'into', 'they',
+  'them', 'their', 'these', 'those', 'being', 'some', 'very', 'just',
+  'also', 'than', 'then', 'each', 'every', 'other', 'more', 'most',
+  'only', 'same', 'such', 'both', 'after', 'before', 'between', 'under',
+  'again', 'there', 'here', 'over', 'can', 'the', 'and', 'for', 'not',
+  'you', 'all', 'are', 'was', 'but', 'how', 'who', 'why', 'did', 'get',
+  'has', 'had', 'his', 'her', 'its', 'may', 'our', 'she', 'too', 'use',
+  'que', 'los', 'las', 'una', 'unos', 'unas', 'del', 'para', 'con',
+  'por', 'entre', 'sobre', 'como', 'pero', 'más', 'este', 'esta', 'ese',
+  'esa', 'aquel', 'aquella', 'todo', 'toda', 'todos', 'todas', 'algo',
+  'algun', 'alguno', 'alguna', 'ningún', 'ninguno', 'ninguna', 'cada',
+  'cuando', 'donde', 'puedo', 'puede', 'pueden', 'tengo', 'tiene',
+])
+
+function generateConversationTitle(text: string): string {
+  if (!text || text.trim().length === 0) return 'New Conversation'
+
+  const cleaned = text.trim().replace(/[?!.,;:]/g, '')
+  const words = cleaned
+    .split(/\s+/)
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+
+  const unique = [...new Set(words)]
+
+  if (unique.length === 0) return 'New Conversation'
+
+  const title = unique.slice(0, 5).join(' ')
+  return title.length > 50 ? title.slice(0, 47) + '...' : title
+}
+
 interface ChatState {
   conversations: Conversation[]
   currentConversationId: string | null
@@ -29,6 +62,7 @@ interface ChatState {
   clearCurrentResponse: () => void
   clearError: () => void
   deleteConversation: (id: string) => Promise<void>
+  updateConversationTitle: (conversationId: string, title: string) => Promise<void>
   setLanguage: (language: LanguageCode) => void
 }
 
@@ -93,10 +127,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string, documentId?: string) => {
-    const { currentConversationId, wsClient, language } = get()
+    const { currentConversationId, wsClient, language, messages } = get()
 
     if (!currentConversationId) {
-      // Create new conversation if none exists
       await get().createConversation()
       return get().sendMessage(text, documentId)
     }
@@ -106,7 +139,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
-    // Add user message to local state
     const userMessage: Message = {
       id: Date.now().toString(),
       conversation_id: currentConversationId,
@@ -128,7 +160,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentResponse: '',
     }))
 
-    // Send message via WebSocket
+    const conversationMessages = messages[currentConversationId] || []
+    const isFirstUserMessage = conversationMessages.filter((m) => m.role === 'user').length === 0
+
+    if (isFirstUserMessage) {
+      const title = generateConversationTitle(text)
+      get().updateConversationTitle(currentConversationId, title)
+    } else if (conversationMessages.filter((m) => m.role === 'user').length > 0 && conversationMessages.filter((m) => m.role === 'user').length % 5 === 4) {
+      const allUserMessages = [...conversationMessages.filter((m) => m.role === 'user'), userMessage]
+      const lastQuestions = allUserMessages.slice(-3).map((m) => m.content)
+      const combined = lastQuestions.join(' ')
+      const title = generateConversationTitle(combined)
+      get().updateConversationTitle(currentConversationId, title)
+    }
+
     wsClient.sendUserQuery(text, documentId, currentConversationId, language)
   },
 
@@ -245,6 +290,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('Failed to delete conversation:', error)
       set({ error: 'Failed to delete conversation' })
       throw error
+    }
+  },
+
+  updateConversationTitle: async (conversationId: string, title: string) => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+
+      const updated = await chatApi.updateConversationTitle(conversationId, title, token)
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, title: updated.title } : c
+        ),
+      }))
+    } catch (error) {
+      console.error('Failed to update conversation title:', error)
     }
   },
 
