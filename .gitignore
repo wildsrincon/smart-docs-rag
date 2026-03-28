@@ -51,3 +51,22 @@ htmlcov/
 
 # Docker
 docker-compose.override.yml
+
+# Temporary test files
+test-files/
+test-results/
+coverage.json
+*.png
+playwright-report/
+screenshots/
+pytest_output.txt
+test_results.json
+test_formats.py
+fix_alembic_heads.py
+fix_db_tables.py
+frontend/test-results/
+backend/coverage.json
+backend/test-results/
+backend/pytest_output.txt
+backend/test_results.json
+backend/test_formats.py
