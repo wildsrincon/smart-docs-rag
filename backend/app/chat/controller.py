@@ -79,6 +79,20 @@ async def get_conversation_history(
     return ChatHistoryResponse(conversation_id=conversation_id, messages=messages)
 
 
+@router.delete(
+    "/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_conversation(
+    db: DbSession, conversation_id: UUID, token: str = Query(...)
+):
+    """Delete a conversation and its messages"""
+    token_data = verify_token(token)
+    user_id = UUID(token_data.user_id)
+    deleted = await chat_service.delete_conversation(db, conversation_id, user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+
 @router.websocket("/ws")
 async def websocket_chat(websocket: WebSocket, token: str):
     """

@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Search, Trash2, X, MessageSquare } from 'lucide-react'
+import { Plus, Search, Trash2, X, MessageSquare, AlertCircle, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { Conversation } from '@/types/api'
+import type { Conversation, Message } from '@/types/api'
 
 interface ChatSidebarProps {
   open: boolean
@@ -12,7 +12,57 @@ interface ChatSidebarProps {
   selectedId: string | null
   onSelect: (id: string) => void
   onCreate: () => void
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<void>
+  messages?: Record<string, Message[]>
+}
+
+function generateConversationSummary(messages: Message[]): string {
+  if (!messages || messages.length === 0) return 'New Conversation'
+
+  const userMessages = messages.filter(m => m.role === 'user').slice(0, 3)
+
+  if (userMessages.length === 0) return 'New Conversation'
+
+  const allContent = userMessages.map(m => m.content).join(' ')
+
+  const stopWords = new Set([
+    'that', 'this', 'with', 'from', 'have', 'been', 'will', 'would',
+    'could', 'should', 'about', 'which', 'their', 'there', 'what',
+    'when', 'where', 'how', 'does', 'can', 'the', 'and', 'for',
+    'are', 'but', 'not', 'you', 'all', 'has', 'was', 'were', 'they',
+    'them', 'into', 'than', 'its', 'his', 'her', 'our', 'your',
+    'tell', 'please', 'want', 'know', 'just', 'also', 'very',
+    'more', 'some', 'like', 'need', 'make', 'does',
+  ])
+
+  const words = allContent
+    .replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !stopWords.has(w.toLowerCase()))
+
+  const uniqueWords = [...new Set(words.map(w => w.toLowerCase()))]
+
+  const keywords = uniqueWords
+    .slice(0, 5)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+
+  const summary = keywords.join(', ')
+  return summary.length > 60 ? summary.slice(0, 57) + '...' : summary
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMinutes = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMinutes < 1) return 'Just now'
+  if (diffMinutes < 60) return `${diffMinutes}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export default function ChatSidebar({
@@ -23,9 +73,11 @@ export default function ChatSidebar({
   onSelect,
   onCreate,
   onDelete,
+  messages = {},
 }: ChatSidebarProps) {
   const [search, setSearch] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [errorId, setErrorId] = useState<string | null>(null)
 
   const filtered = search.trim()
     ? conversations.filter((c) =>
@@ -33,11 +85,21 @@ export default function ChatSidebar({
       )
     : conversations
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    if (deletingId === id) return
+
     setDeletingId(id)
-    onDelete(id)
-    setTimeout(() => setDeletingId(null), 300)
+    setErrorId(null)
+
+    try {
+      await onDelete(id)
+    } catch {
+      setErrorId(id)
+      setTimeout(() => setErrorId(null), 3000)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const handleSelect = (id: string) => {
@@ -46,6 +108,12 @@ export default function ChatSidebar({
       onClose()
     }
   }
+
+  const sortedConversations = [...filtered].sort((a, b) => {
+    const dateA = new Date(a.updated_at).getTime()
+    const dateB = new Date(b.updated_at).getTime()
+    return dateB - dateA
+  })
 
   return (
     <>
@@ -116,54 +184,96 @@ export default function ChatSidebar({
             </div>
           ) : (
             <div className="space-y-1">
-              {filtered.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => handleSelect(conv.id)}
-                  className={cn(
-                    'group relative flex items-center p-2.5 rounded-xl cursor-pointer transition-all duration-150',
-                    selectedId === conv.id
-                      ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/40'
-                      : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent'
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        'text-sm font-medium truncate',
-                        selectedId === conv.id
-                          ? 'text-primary-700 dark:text-primary-400'
-                          : 'text-slate-700 dark:text-slate-300'
-                      )}
-                    >
-                      {conv.title || 'New Conversation'}
-                    </p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                      {conv.updated_at
-                        ? new Date(conv.updated_at).toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                          })
-                        : 'No messages yet'}
-                    </p>
-                  </div>
+              {sortedConversations.map((conv) => {
+                const convMessages = messages[conv.id] || []
+                const summary = generateConversationSummary(convMessages)
+                const isActive = selectedId === conv.id
+                const isDeleting = deletingId === conv.id
+                const hasError = errorId === conv.id
 
-                  <button
-                    onClick={(e) => handleDelete(e, conv.id)}
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => handleSelect(conv.id)}
                     className={cn(
-                      'opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all',
-                      deletingId === conv.id && 'opacity-100'
+                      'group relative flex items-start gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all duration-150',
+                      isActive
+                        ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/40'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent',
+                      isDeleting && 'opacity-60 pointer-events-none'
                     )}
-                    title="Delete conversation"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <div className="shrink-0 mt-0.5">
+                      <div
+                        className={cn(
+                          'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
+                          isActive
+                            ? 'bg-primary-100 dark:bg-primary-800/40'
+                            : 'bg-slate-100 dark:bg-slate-700 group-hover:bg-slate-200 dark:group-hover:bg-slate-600'
+                        )}
+                      >
+                        <MessageSquare
+                          className={cn(
+                            'w-3.5 h-3.5',
+                            isActive
+                              ? 'text-primary-600 dark:text-primary-400'
+                              : 'text-slate-400 dark:text-slate-500'
+                          )}
+                        />
+                      </div>
+                    </div>
 
-                  {selectedId === conv.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-primary-500" />
-                  )}
-                </div>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={cn(
+                          'text-sm font-medium truncate leading-tight',
+                          isActive
+                            ? 'text-primary-700 dark:text-primary-400'
+                            : 'text-slate-700 dark:text-slate-300'
+                        )}
+                      >
+                        {conv.title || 'New Conversation'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate leading-tight">
+                        {summary}
+                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <Clock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
+                        <span className="text-[10px] text-slate-300 dark:text-slate-600">
+                          {conv.updated_at
+                            ? formatRelativeTime(conv.updated_at)
+                            : 'No messages yet'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {hasError && (
+                      <div className="shrink-0 mt-0.5" title="Failed to delete">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                      </div>
+                    )}
+
+                    <button
+                      onClick={(e) => handleDelete(e, conv.id)}
+                      className={cn(
+                        'shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all',
+                        (deletingId === conv.id || hasError) && 'opacity-100'
+                      )}
+                      title="Delete conversation"
+                    >
+                      {isDeleting ? (
+                        <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-primary-500" />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -144,6 +144,30 @@ class ChatService:
             logger.error(f"Error getting conversation history: {e}")
             raise
 
+    async def delete_conversation(
+        self, db: AsyncSession, conversation_id: UUID, user_id: UUID
+    ) -> bool:
+        """Delete a conversation and its messages (CASCADE)"""
+        try:
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.id == conversation_id)
+                .where(Conversation.user_id == user_id)
+            )
+            conversation = result.scalar_one_or_none()
+            if not conversation:
+                return False
+
+            await db.delete(conversation)
+            await db.flush()
+
+            logger.info(f"Deleted conversation: {conversation_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error deleting conversation: {e}")
+            raise
+
     def format_history_for_langchain(
         self, messages: List[MessageResponse]
     ) -> List[dict]:

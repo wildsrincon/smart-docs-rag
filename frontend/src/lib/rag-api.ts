@@ -119,7 +119,7 @@ export const chatApi = {
     const response = await api.delete(`/chat/conversations/${id}`, {
       params: { token },
     })
-    return response.data
+    return response.status === 204
   },
 }
 
