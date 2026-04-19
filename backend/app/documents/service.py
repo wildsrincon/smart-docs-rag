@@ -176,7 +176,7 @@ class DocumentService:
                 return False
 
             await db.delete(document)
-            await db.flush()
+            await db.commit()
             logger.info(f"Deleted document {document_id}")
             return True
 

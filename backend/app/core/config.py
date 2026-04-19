@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Google Gemini Configuration
     GOOGLE_AI_API_KEY: str = ""
     GEMINI_CHAT_MODEL: str = "gemini-2.1-flash"
-    GOOGLE_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    GOOGLE_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
 
     # LLM Provider: "gemini" | "zhipuai" | "openai" (default: auto-detect)
     LLM_PROVIDER: str = ""
@@ -183,7 +183,7 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.2
 
     # Document Processing
-    MAX_FILE_SIZE_MB: int = 10
+    MAX_FILE_SIZE_MB: int = 100
     SUPPORTED_FILE_EXTENSIONS: str = "pdf,docx,xlsx,xls,pptx,txt,md,csv"
 
     # Rate Limiting

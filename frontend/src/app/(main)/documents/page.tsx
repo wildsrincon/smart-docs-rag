@@ -35,6 +35,7 @@ export default function DocumentsPage() {
     selectDocument,
     deleteDocument,
     uploadDocument,
+    startPolling,
   } = useDocumentStore()
 
   const { viewMode, onViewModeChange } = useViewMode()
@@ -119,9 +120,6 @@ export default function DocumentsPage() {
   }, [search, fileType, status, dateRange])
 
   const handleDelete = useCallback(async (documentId: string): Promise<boolean> => {
-    if (!window.confirm('Are you sure you want to delete this document?')) {
-      return false
-    }
     try {
       await deleteDocument(documentId)
       return true
@@ -135,12 +133,10 @@ export default function DocumentsPage() {
     router.push('/chat')
   }, [selectDocument, router])
 
-  const handleUpload = useCallback(async (files: File[]) => {
-    for (const file of files) {
-      await uploadDocument(file)
-    }
-    setUploadModalOpen(false)
-  }, [uploadDocument])
+  const handleUpload = useCallback(async (file: File, onProgress: (progress: number) => void) => {
+    await uploadDocument(file, onProgress)
+    startPolling()
+  }, [uploadDocument, startPolling])
 
   return (
     <div className="px-4 py-8 sm:px-6 lg:px-8">
