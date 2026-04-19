@@ -446,7 +446,7 @@ class TestUploadFlow:
         ):
             # Mock query (would be called after ingestion completes)
             with patch.object(
-                chat_service, "generate_query_embedding", return_value=[0.1] * 1536
+                chat_service, "generate_query_embedding", return_value=[0.1] * 512
             ):
                 with patch.object(
                     chat_service.vector_store,

@@ -60,7 +60,7 @@ export const documentsApi = {
   },
 
   getAll: async (skip = 0, limit = 100) => {
-    const response = await api.get('/documents', {
+    const response = await api.get('/documents/', {
       params: { skip, limit },
     })
     return response.data
@@ -83,35 +83,35 @@ export const documentsApi = {
 }
 
 export const chatApi = {
-  createConversation: async (title: string, token: string) => {
-    const response = await api.post(
-      '/chat/conversations',
-      { title },
-      {
-        params: { token },
-      }
-    )
+  createConversation: async (title: string) => {
+    const response = await api.post('/chat/conversations', { title })
     return response.data
   },
 
-  getAllConversations: async (skip = 0, limit = 100, token: string) => {
+  getAllConversations: async (skip = 0, limit = 100) => {
     const response = await api.get('/chat/conversations', {
-      params: { skip, limit, token },
+      params: { skip, limit },
     })
     return response.data
   },
 
-  getConversation: async (id: string, token: string) => {
-    const response = await api.get(`/chat/conversations/${id}`, {
-      params: { token },
-    })
+  getConversation: async (id: string) => {
+    const response = await api.get(`/chat/conversations/${id}`)
     return response.data
   },
 
-  getConversationHistory: async (conversationId: string, token: string) => {
-    const response = await api.get(`/chat/conversations/${conversationId}/history`, {
-      params: { token },
-    })
+  getConversationHistory: async (conversationId: string) => {
+    const response = await api.get(`/chat/conversations/${conversationId}/history`)
+    return response.data
+  },
+
+  deleteConversation: async (id: string) => {
+    const response = await api.delete(`/chat/conversations/${id}`)
+    return response.status === 204
+  },
+
+  updateConversationTitle: async (id: string, title: string) => {
+    const response = await api.put(`/chat/conversations/${id}/title`, { title })
     return response.data
   },
 }

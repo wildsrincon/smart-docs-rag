@@ -68,7 +68,7 @@ class TestRAGLatency:
         )
 
         # Mock embedding generation
-        mock_embeddings = [[0.1] * 1536 for _ in chunks]
+        mock_embeddings = [[0.1] * 512 for _ in chunks]
 
         # Insert chunks
         chunk_data = [
@@ -114,7 +114,7 @@ class TestRAGLatency:
         )
 
         # Mock embedding generation
-        mock_embeddings = [[0.1] * 1536 for _ in chunks]
+        mock_embeddings = [[0.1] * 512 for _ in chunks]
 
         # Insert chunks
         chunk_data = [
@@ -155,7 +155,7 @@ class TestRAGLatency:
                     test_document.id,
                     test_user.id,
                     f"Chunk {i} content about topic {i % 3}.",
-                    [0.1 * (i % 3)] * 1536,
+                    [0.1 * (i % 3)] * 512,
                     i,
                     20,
                     {},
@@ -166,7 +166,7 @@ class TestRAGLatency:
         await db_session.commit()
 
         # Perform similarity search
-        query_embedding = [0.1] * 1536
+        query_embedding = [0.1] * 512
 
         start_time = time.perf_counter()
         results = await vector_store.similarity_search(
@@ -198,7 +198,7 @@ class TestRAGLatency:
                     test_document.id,
                     test_user.id,
                     f"Chunk {i} content about topic {i % 10}.",
-                    [0.1 * (i % 10)] * 1536,
+                    [0.1 * (i % 10)] * 512,
                     i,
                     20,
                     {},
@@ -209,7 +209,7 @@ class TestRAGLatency:
         await db_session.commit()
 
         # Perform similarity search
-        query_embedding = [0.1] * 1536
+        query_embedding = [0.1] * 512
 
         start_time = time.perf_counter()
         results = await vector_store.similarity_search(
@@ -241,7 +241,7 @@ class TestRAGLatency:
                     test_document.id,
                     test_user.id,
                     f"Chunk {i} content about topic {i % 20}.",
-                    [0.1 * (i % 20)] * 1536,
+                    [0.1 * (i % 20)] * 512,
                     i,
                     20,
                     {},
@@ -252,7 +252,7 @@ class TestRAGLatency:
         await db_session.commit()
 
         # Perform similarity search
-        query_embedding = [0.1] * 1536
+        query_embedding = [0.1] * 512
 
         start_time = time.perf_counter()
         results = await vector_store.similarity_search(
@@ -279,7 +279,7 @@ class TestRAGLatency:
 
         # Mock embedding generation
         with patch.object(
-            chat_service, "generate_query_embedding", return_value=[0.1] * 1536
+            chat_service, "generate_query_embedding", return_value=[0.1] * 512
         ):
             # Mock retrieval
             with patch.object(
@@ -335,7 +335,7 @@ class TestRAGLatency:
 
         # Mock embedding generation
         with patch.object(
-            chat_service, "generate_query_embedding", return_value=[0.1] * 1536
+            chat_service, "generate_query_embedding", return_value=[0.1] * 512
         ):
             # Mock retrieval
             with patch.object(
@@ -403,7 +403,7 @@ class TestRAGLatency:
             chunker = Chunker()
             chunks = chunker.create_chunks(text, {"document_id": str(document_id)})
 
-            mock_embeddings = [[0.1] * 1536 for _ in chunks]
+            mock_embeddings = [[0.1] * 512 for _ in chunks]
 
             chunk_data = [
                 (
@@ -450,7 +450,7 @@ class TestRAGLatency:
                 test_document.id,
                 test_user.id,
                 f"Chunk {i} content.",
-                [0.1] * 1536,
+                [0.1] * 512,
                 i,
                 10,
                 {},
@@ -469,7 +469,7 @@ class TestRAGLatency:
         # Simulate 10 concurrent queries
         async def process_query(query_id: int):
             with patch.object(
-                chat_service, "generate_query_embedding", return_value=[0.1] * 1536
+                chat_service, "generate_query_embedding", return_value=[0.1] * 512
             ):
                 with patch.object(
                     chat_service.vector_store, "similarity_search", return_value=[]

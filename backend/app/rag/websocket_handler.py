@@ -1,5 +1,6 @@
 """WebSocket handler for real-time chat streaming"""
 
+import asyncio
 import json
 import logging
 from typing import Dict, Optional
@@ -9,6 +10,7 @@ from fastapi import WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
 from app.auth.service import verify_token, get_current_user
+from app.notifications.redis_notifier import redis_notifier
 from app.rag.model import (
     WebSocketMessage,
     UserQueryMessage,
@@ -37,6 +39,7 @@ class WebSocketHandler:
 
     def __init__(self):
         self.active_connections: Dict[UUID, WebSocket] = {}
+        self._listener_tasks: Dict[UUID, asyncio.Task] = {}
         self.chat_service = ChatService()
         self.conversation_service = ConversationService()
 
@@ -58,6 +61,12 @@ class WebSocketHandler:
             await websocket.accept()
             self.active_connections[user_id] = websocket
 
+            # Start Redis subscriber task for cross-worker notifications
+            if redis_notifier.is_available:
+                task = asyncio.create_task(self._redis_listener(user_id, websocket))
+                self._listener_tasks[user_id] = task
+                logger.debug(f"Redis listener started for user {user_id}")
+
             logger.info(f"WebSocket connected for user {user_id}")
 
             # Send connection confirmation
@@ -72,8 +81,11 @@ class WebSocketHandler:
             return False, str(e), None
 
     def disconnect(self, user_id: UUID) -> None:
-        """Remove connection"""
+        """Remove connection and cancel Redis listener task"""
         self.active_connections.pop(user_id, None)
+        task = self._listener_tasks.pop(user_id, None)
+        if task and not task.done():
+            task.cancel()
         logger.info(f"WebSocket disconnected for user {user_id}")
 
     async def send_message(self, user_id: UUID, message: dict) -> bool:
@@ -115,7 +127,12 @@ class WebSocketHandler:
     async def send_document_status(
         self, user_id: UUID, document_id: UUID, status: IngestionStatus, progress: int
     ) -> None:
-        """Send document ingestion status update to user"""
+        """Send document ingestion status update to user.
+
+        Publishes via Redis so the notification reaches the user regardless of
+        which worker they are connected to. Falls back to direct in-process send
+        when Redis is not configured (single-worker mode).
+        """
         message = {
             "type": "document_status",
             "data": {
@@ -124,7 +141,28 @@ class WebSocketHandler:
                 "progress": progress,
             },
         }
-        await self.send_message(user_id, message)
+        published = await redis_notifier.publish(user_id, message)
+        if not published:
+            # Redis not available — direct send works only within the same worker
+            await self.send_message(user_id, message)
+
+    async def _redis_listener(self, user_id: UUID, websocket: WebSocket) -> None:
+        """Background task: subscribe to Redis channel and forward messages to WebSocket."""
+        try:
+            async for message in redis_notifier.subscribe(user_id):
+                try:
+                    await websocket.send_json(message)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to forward Redis message to user {user_id}: {e}"
+                    )
+                    break
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Redis listener task error for user {user_id}: {e}")
+        finally:
+            logger.debug(f"Redis listener stopped for user {user_id}")
 
     async def handle_user_query(
         self, websocket: WebSocket, message: dict, user_id: UUID, db: AsyncSession
@@ -165,7 +203,7 @@ class WebSocketHandler:
             await self.conversation_service.create_message(
                 db, conversation_id, user_id, MessageRole.USER, data.text
             )
-            await db.commit()
+            await db.flush()
 
             # Send processing status
             await self.broadcast_status(user_id, "processing", conversation_id)
@@ -181,8 +219,9 @@ class WebSocketHandler:
             )
 
             # Get RAG response
+            language = data.language or "en"
             response_data = await self.chat_service.answer_question(
-                db, user_id, data.text, document_ids, history
+                db, user_id, data.text, document_ids, history, language=language
             )
 
             # Stream assistant response
@@ -212,7 +251,10 @@ class WebSocketHandler:
             )
 
             # Save assistant message
-            # Note: Token counting would need tiktoken integration
+            citation_data = response_data.get("citations", [])
+            doc_ids = list(
+                set(c.get("document_id") for c in citation_data if c.get("document_id"))
+            )
             await self.conversation_service.create_message(
                 db,
                 conversation_id,
@@ -220,9 +262,9 @@ class WebSocketHandler:
                 MessageRole.ASSISTANT,
                 full_response,
                 tokens=None,
-                document_ids=response_data.get("citations", []),
+                document_ids=doc_ids,
             )
-            await db.commit()
+            await db.flush()
 
             # Send completion status
             await self.broadcast_status(user_id, "complete", conversation_id)

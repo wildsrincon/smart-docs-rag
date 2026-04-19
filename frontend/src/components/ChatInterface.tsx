@@ -17,7 +17,6 @@ export default function ChatInterface() {
     isProcessing,
     isConnected,
     sendMessage,
-    connectWebSocket,
   } = useChatStore()
 
   const { selectedDocumentId } = useDocumentStore()
@@ -29,13 +28,6 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom()
   }, [messages, currentResponse])
-
-  useEffect(() => {
-    connectWebSocket()
-    return () => {
-      // Cleanup is handled in the store
-    }
-  }, [])
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -70,6 +70,8 @@ class GoogleUserInfo(BaseModel):
 class GoogleTokenResponse(BaseModel):
     """Response from Google token endpoint"""
 
+    model_config = {"extra": "ignore"}
+
     access_token: str
     id_token: str
     expires_in: int

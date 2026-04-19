@@ -16,8 +16,12 @@ async_engine = create_async_engine(
     settings.async_db_url,
     echo=False,
     pool_pre_ping=True,
-    poolclass=None,  # Disable custom pool
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=1800,
 )
+
 
 # Async session factory
 AsyncSessionLocal = async_sessionmaker(

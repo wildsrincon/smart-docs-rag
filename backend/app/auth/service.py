@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jwt import PyJWTError
+from jwt import ExpiredSignatureError, PyJWTError
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,9 @@ def verify_token(token: str) -> model.TokenData:
         user_id: str = payload.get("id")
         provider: str = payload.get("provider", "manual")
         return model.TokenData(user_id=user_id, provider=provider)
+    except ExpiredSignatureError:
+        logging.warning("Token verification failed: Token has expired")
+        raise AuthenticationError()
     except PyJWTError as e:
         logging.warning(f"Token verification failed: {str(e)}")
         raise AuthenticationError()
@@ -156,14 +159,20 @@ async def handle_google_callback(
     Returns:
         OAuthTokenResponse with JWT access token
     """
+    logging.info("Google OAuth callback started - exchanging code for token")
+    logging.debug(f"Code length: {len(code)}, State: {state[:20]}...")
+
     # Exchange code for token
     token_response = await google_service.exchange_code_for_token(code, state)
+    logging.info("Google token exchange successful")
 
     # Get user info from Google
     google_user = await google_service.get_user_info(token_response.access_token)
+    logging.info(f"Got Google user info: {google_user.email}")
 
     # Find or create user
     user = await google_service.find_or_create_user(google_user, db)
+    logging.info(f"User found/created: {user.id} - {user.email}")
 
     # Generate JWT token
     token = create_access_token(
@@ -172,6 +181,7 @@ async def handle_google_callback(
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         provider="google",
     )
+    logging.info(f"Generated JWT token for user: {user.email}")
 
     logging.info(f"Google OAuth login successful for user: {user.email}")
 

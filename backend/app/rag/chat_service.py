@@ -6,9 +6,9 @@ from typing import List, Optional, AsyncIterator
 from uuid import UUID
 from datetime import datetime, timezone
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,21 +23,69 @@ class ChatService:
 
     def __init__(self):
         self.vector_store = VectorStore()
-        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.chat_llm = ChatOpenAI(
-            model=settings.OPENAI_CHAT_MODEL,
-            api_key=settings.OPENAI_API_KEY,
+        self._embeddings = self._build_embeddings()
+        self.chat_llm: BaseChatModel = self._build_chat_llm()
+
+    @staticmethod
+    def _build_embeddings():
+        provider = settings.embedding_provider
+        if provider == "google":
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+            return GoogleGenerativeAIEmbeddings(
+                model=settings.GOOGLE_EMBEDDING_MODEL,
+                google_api_key=settings.GOOGLE_AI_API_KEY,
+            )
+        return AsyncOpenAI(
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url,
+        )
+
+    @staticmethod
+    def _build_chat_llm() -> BaseChatModel:
+        provider = settings.llm_provider
+        if provider == "gemini":
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+            return ChatGoogleGenerativeAI(
+                model=settings.GEMINI_CHAT_MODEL,
+                google_api_key=settings.GOOGLE_AI_API_KEY,
+                temperature=0.7,
+                streaming=True,
+            )
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=settings.chat_model,
+            api_key=settings.chat_api_key,
+            base_url=settings.chat_base_url,
             temperature=0.7,
             streaming=True,
         )
 
     async def generate_query_embedding(self, query: str) -> List[float]:
-        """Generate embedding for user query"""
+        """Generate embedding for a user query."""
         try:
-            response = await self.openai_client.embeddings.create(
-                model=settings.OPENAI_EMBEDDING_MODEL, input=query
-            )
-            return response.data[0].embedding
+            provider = settings.embedding_provider
+            if provider == "google":
+                embedding = await self._embeddings.aembed_query(query)
+            else:
+                response = await self._embeddings.embeddings.create(
+                    model=settings.embedding_model,
+                    input=query,
+                    extra_body={
+                        "input_type": "query",
+                        "output_dimension": settings.EMBEDDING_DIMENSION,
+                    },
+                )
+                embedding = response.data[0].embedding
+
+            if not isinstance(embedding, list):
+                raise ValueError(
+                    f"Embedding provider returned unexpected type: {type(embedding)!r}"
+                )
+            logger.info(f"Query embedding generated: dim={len(embedding)}")
+            return embedding
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")
             raise
@@ -154,29 +202,45 @@ class ChatService:
         context = "\n".join(context_parts)
         return context, citations
 
-    def format_messages(self) -> ChatPromptTemplate:
+    def format_messages(self, language: str = "en") -> ChatPromptTemplate:
         """
         Format messages for LangChain prompt.
+
+        Args:
+            language: Language code for LLM response (e.g., "en", "es")
 
         Returns:
             Formatted ChatPromptTemplate with context, query, and history as variables
         """
-        system_prompt = """You are a helpful assistant that answers questions based on the provided document sources.
+        language_instructions = {
+            "en": "Respond in English.",
+            "es": "Responde en español.",
+        }
+        lang_instruction = language_instructions.get(
+            language, language_instructions["en"]
+        )
+
+        system_prompt = f"""You are a helpful assistant that answers questions based on the provided document sources.
 Use only the information from the sources to answer. If the sources don't contain the answer, say so clearly.
-Be concise and accurate. When referencing information, mention the document name naturally in your response (e.g., "Según el documento X..." or "En el archivo Y se indica que..."). Do NOT use [Source N] or numbered citation brackets. Instead, weave the source names into your prose naturally. If multiple sources are relevant, mention each one. At the end of your response, add a "Fuentes" section listing the documents you referenced."""
+Be concise and accurate. When referencing information, mention the document name naturally in your response (e.g., "According to document X..." or "In file Y it indicates that..."). Do NOT use [Source N] or numbered citation brackets. Instead, weave the source names into your prose naturally. If multiple sources are relevant, mention each one. At the end of your response, add a "Sources" section listing the documents you referenced.
+{lang_instruction}"""
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 MessagesPlaceholder(variable_name="history", optional=True),
-                ("human", "Fuentes:\n{context}\n\nPregunta: {query}"),
+                ("human", "Sources:\n{context}\n\nQuestion: {query}"),
             ]
         )
 
         return prompt
 
     async def generate_response_stream(
-        self, query: str, context: str, conversation_history: List[dict] | None = None
+        self,
+        query: str,
+        context: str,
+        conversation_history: List[dict] | None = None,
+        language: str = "en",
     ) -> AsyncIterator[str]:
         """
         Generate streaming response using LangChain.
@@ -185,12 +249,13 @@ Be concise and accurate. When referencing information, mention the document name
             query: User query
             context: Assembled context
             conversation_history: Optional conversation history
+            language: Language code for LLM response
 
         Yields:
             Response tokens
         """
         try:
-            prompt = self.format_messages()
+            prompt = self.format_messages(language)
 
             chain = prompt | self.chat_llm | StrOutputParser()
 
@@ -217,6 +282,7 @@ Be concise and accurate. When referencing information, mention the document name
         document_ids: Optional[List[UUID]] = None,
         conversation_history: Optional[List[dict]] = None,
         top_k: int = 10,
+        language: str = "en",
     ) -> dict:
         """
         Complete RAG pipeline: retrieve -> assemble -> generate.
@@ -228,6 +294,7 @@ Be concise and accurate. When referencing information, mention the document name
             document_ids: Optional document filter
             conversation_history: Optional conversation history
             top_k: Number of chunks to retrieve
+            language: Language code for LLM response
 
         Returns:
             Dict with citations and streaming function
@@ -251,7 +318,7 @@ Be concise and accurate. When referencing information, mention the document name
                 logger.warning("No relevant chunks found")
                 return {
                     "citations": [],
-                    "stream": self._generate_no_context_response(query),
+                    "stream": self._generate_no_context_response(query, language),
                 }
 
             # Step 3: Assemble context
@@ -262,7 +329,9 @@ Be concise and accurate. When referencing information, mention the document name
 
             # Step 4: Generate streaming response
             logger.info("Generating response...")
-            stream = self.generate_response_stream(query, context, conversation_history)
+            stream = self.generate_response_stream(
+                query, context, conversation_history, language
+            )
 
             return {"citations": citations, "stream": stream}
 
@@ -270,7 +339,12 @@ Be concise and accurate. When referencing information, mention the document name
             logger.error(f"Error in answer_question: {e}")
             raise
 
-    async def _generate_no_context_response(self, query: str) -> AsyncIterator[str]:
+    async def _generate_no_context_response(
+        self, query: str, language: str = "en"
+    ) -> AsyncIterator[str]:
         """Generate response when no relevant context is found"""
-        response = "I couldn't find relevant information in the documents to answer your question. Please try rephrasing or upload additional documents."
-        yield response
+        messages = {
+            "en": "I couldn't find relevant information in the documents to answer your question. Please try rephrasing or upload additional documents.",
+            "es": "No pude encontrar información relevante en los documentos para responder a tu pregunta. Intenta reformularla o sube documentos adicionales.",
+        }
+        yield messages.get(language, messages["en"])

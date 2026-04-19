@@ -29,11 +29,15 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Don't redirect for Google OAuth callback (it's expected to handle errors)
-    const isGoogleCallback = error.config?.url?.includes('/auth/google/callback')
+    if (error.response?.status === 401) {
+      const isGoogleCallback = error.config?.url?.includes('/auth/google/callback')
+      const isOnCallbackPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback')
 
-    if (error.response?.status === 401 && !isGoogleCallback) {
-      // Token expired or invalid
+      if (isGoogleCallback || isOnCallbackPage) {
+        console.warn('[API] 401 on auth callback page — not redirecting')
+        return Promise.reject(error)
+      }
+
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
         window.location.href = '/login'

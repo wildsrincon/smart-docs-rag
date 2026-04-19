@@ -36,7 +36,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
-    """Upload a PDF document for ingestion into the RAG system"""
+    """Upload a document for ingestion into the RAG system (PDF, DOCX, XLSX, XLS, PPTX, TXT, MD, CSV)"""
     user_id = UUID(current_user.user_id)
     return await document_service.create_document(db, user_id, file, background_tasks)
 

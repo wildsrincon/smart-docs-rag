@@ -5,7 +5,10 @@ including authorization URL generation, token exchange,
 and user account creation/linking.
 """
 
+import hashlib
+import hmac
 import logging
+import time
 from secrets import token_urlsafe
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -20,6 +23,8 @@ from ..auth import model
 from ..entities.user import User
 from ..exceptions import AuthenticationError
 
+STATE_EXPIRY_SECONDS = 600
+
 
 # Google OAuth endpoints
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -32,6 +37,34 @@ GOOGLE_OAUTH_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
+
+
+def _sign_state(payload: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def _build_signed_state() -> str:
+    raw = f"{int(time.time())}:{token_urlsafe(32)}"
+    sig = _sign_state(raw)
+    return f"{raw}:{sig}"
+
+
+def _verify_signed_state(state: str) -> bool:
+    try:
+        parts = state.split(":")
+        if len(parts) != 3:
+            return False
+        ts_str, _random, sig = parts
+        expected_sig = _sign_state(f"{ts_str}:{_random}")
+        if not hmac.compare_digest(sig, expected_sig):
+            return False
+        if time.time() - int(ts_str) > STATE_EXPIRY_SECONDS:
+            return False
+        return True
+    except (ValueError, IndexError):
+        return False
 
 
 class GoogleOAuthService:
@@ -71,13 +104,12 @@ class GoogleOAuthService:
         if not self.is_enabled():
             raise AuthenticationError("Google OAuth is not configured")
 
-        state = token_urlsafe(32)
+        state = _build_signed_state()
         oauth = self.create_oauth_session(state)
-        authorization_url, _ = oauth.create_authorization_url(
+        authorization_url, state = oauth.create_authorization_url(
             GOOGLE_AUTH_URL,
-            # Enable offline access to get refresh token
+            state=state,
             access_type="offline",
-            # Force consent to get refresh token
             prompt="consent",
         )
         return authorization_url, state
@@ -98,18 +130,26 @@ class GoogleOAuthService:
         if not self.is_enabled():
             raise AuthenticationError("Google OAuth is not configured")
 
-        oauth = self.create_oauth_session(state)
+        if not _verify_signed_state(state):
+            logging.warning(f"State verification failed for state: {state[:30]}...")
+            raise AuthenticationError("Invalid or expired state parameter")
 
-        try:
-            token_data = await oauth.fetch_token(
-                GOOGLE_TOKEN_URL,
-                code=code,
-                client_secret=self.client_secret,
-            )
-            return model.GoogleTokenResponse(**token_data)
-        except Exception as e:
-            logging.error(f"Failed to exchange code for token: {str(e)}")
-            raise AuthenticationError("Failed to authenticate with Google")
+        async with self.create_oauth_session(state) as oauth:
+            try:
+                token_data = await oauth.fetch_token(
+                    GOOGLE_TOKEN_URL,
+                    code=code,
+                    client_secret=self.client_secret,
+                )
+                logging.info("Successfully exchanged code for Google token")
+                return model.GoogleTokenResponse(**token_data)
+            except AuthenticationError:
+                raise
+            except Exception as e:
+                logging.error(
+                    f"Failed to exchange code for token: {str(e)}", exc_info=True
+                )
+                raise AuthenticationError("Failed to authenticate with Google")
 
     async def get_user_info(self, access_token: str) -> model.GoogleUserInfo:
         """
@@ -121,15 +161,16 @@ class GoogleOAuthService:
         Returns:
             GoogleUserInfo with user details
         """
-        oauth = OAuth2Session(token={"access_token": access_token})
-
-        try:
-            response = await oauth.get(GOOGLE_USERINFO_URL)
-            response.raise_for_status()
-            return model.GoogleUserInfo(**response.json())
-        except Exception as e:
-            logging.error(f"Failed to fetch user info from Google: {str(e)}")
-            raise AuthenticationError("Failed to fetch user information from Google")
+        async with OAuth2Session(token={"access_token": access_token}) as oauth:
+            try:
+                response = await oauth.get(GOOGLE_USERINFO_URL)
+                response.raise_for_status()
+                return model.GoogleUserInfo(**response.json())
+            except Exception as e:
+                logging.error(f"Failed to fetch user info from Google: {str(e)}")
+                raise AuthenticationError(
+                    "Failed to fetch user information from Google"
+                )
 
     async def find_or_create_user(
         self, google_user: model.GoogleUserInfo, db: AsyncSession

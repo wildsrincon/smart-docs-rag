@@ -20,7 +20,7 @@ class Chunk(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(1536))  # OpenAI text-embedding-3-small dimension
+    embedding = Column(Vector(768))  # Google text-embedding-004 dimension (768)
     chunk_index = Column(Integer, nullable=False)
     token_count = Column(Integer)
     chunk_metadata = Column(Text)  # JSON string (page number, section, etc.)
