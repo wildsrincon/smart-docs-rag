@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useDocumentStore } from '@/store/documents'
 import { cn } from '@/lib/utils'
 import { getFileType, type FileType, type DocumentStatus } from '@/lib/document-utils'
-import { MOCK_DOCUMENTS } from '@/lib/mock-documents'
 import DocumentGrid from '@/components/documents/DocumentGrid'
 import DocumentList from '@/components/documents/DocumentList'
 import DocumentViewToggle, { useViewMode } from '@/components/documents/DocumentViewToggle'
@@ -54,7 +53,7 @@ export default function DocumentsPage() {
     fetchDocuments()
   }, [fetchDocuments])
 
-  const documents = storeDocuments.length > 0 ? storeDocuments : MOCK_DOCUMENTS
+  const documents = storeDocuments
 
   const stats = {
     total: documents.length,
@@ -119,9 +118,15 @@ export default function DocumentsPage() {
     setPage(1)
   }, [search, fileType, status, dateRange])
 
-  const handleDelete = useCallback(async (documentId: string) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
+  const handleDelete = useCallback(async (documentId: string): Promise<boolean> => {
+    if (!window.confirm('Are you sure you want to delete this document?')) {
+      return false
+    }
+    try {
       await deleteDocument(documentId)
+      return true
+    } catch {
+      return false
     }
   }, [deleteDocument])
 

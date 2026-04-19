@@ -4,6 +4,7 @@ import { chatApi } from '@/lib/rag-api'
 import WebSocketClient from '@/lib/websocket-client'
 import { detectLanguage } from '@/lib/language-detect'
 import { useLanguageStore } from '@/store/language'
+import { useAuthStore } from '@/store/auth'
 
 const STOP_WORDS = new Set([
   'that', 'this', 'what', 'which', 'where', 'when', 'with', 'from', 'have',
@@ -81,7 +82,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const token = localStorage.getItem('access_token')
       if (!token) throw new Error('No token found')
 
-      const conversations = await chatApi.getAllConversations(0, 100, token)
+      const conversations = await chatApi.getAllConversations(0, 100)
       set({ conversations })
     } catch (error) {
       console.error('Failed to fetch conversations:', error)
@@ -93,7 +94,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const token = localStorage.getItem('access_token')
       if (!token) throw new Error('No token found')
 
-      const conversation = await chatApi.createConversation(title, token)
+      const conversation = await chatApi.createConversation(title)
       set((state) => ({
         conversations: [conversation, ...state.conversations],
         currentConversationId: conversation.id,
@@ -115,7 +116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const token = localStorage.getItem('access_token')
       if (!token) throw new Error('No token found')
 
-      const history = await chatApi.getConversationHistory(id, token)
+      const history = await chatApi.getConversationHistory(id)
       set((state) => ({
         messages: { ...state.messages, [id]: history.messages },
       }))
@@ -125,13 +126,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (text: string, documentId?: string) => {
-    const { currentConversationId, wsClient, messages } = get()
+    let { currentConversationId, wsClient } = get()
 
     if (!currentConversationId) {
-      await get().createConversation()
-      return get().sendMessage(text, documentId)
+      try {
+        const conversation = await get().createConversation()
+        currentConversationId = conversation.id
+      } catch (error) {
+        console.error('Failed to create conversation for message:', error)
+        set({ error: 'Failed to create conversation' })
+        return
+      }
     }
 
+    // Re-read wsClient after potential conversation creation
+    wsClient = get().wsClient
     if (!wsClient || !wsClient.isConnected()) {
       set({ error: 'Not connected to chat server' })
       return
@@ -152,13 +161,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: {
         ...state.messages,
-        [currentConversationId]: [...(state.messages[currentConversationId] || []), userMessage],
+        [currentConversationId!]: [...(state.messages[currentConversationId!] || []), userMessage],
       },
       isProcessing: true,
       currentResponse: '',
     }))
 
-    const conversationMessages = messages[currentConversationId] || []
+    const conversationMessages = get().messages[currentConversationId] || []
     const isFirstUserMessage = conversationMessages.filter((m) => m.role === 'user').length === 0
 
     if (isFirstUserMessage) {
@@ -174,29 +183,84 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const detectedLang = detectLanguage(text)
     useLanguageStore.getState().setDetectedLanguage(detectedLang)
-    wsClient.sendUserQuery(text, documentId, currentConversationId, detectedLang)
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const safeDocumentId = documentId && UUID_REGEX.test(documentId) ? documentId : undefined
+    wsClient.sendUserQuery(text, safeDocumentId, currentConversationId, detectedLang)
   },
 
   connectWebSocket: () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
+    const { wsClient: existingClient } = get()
+    if (existingClient && existingClient.isConnected()) {
+      console.log('[Chat] WebSocket already connected, skipping')
+      return
+    }
 
-    const wsUrl = process.env.NEXT_PUBLIC_API_URL
-      ? `ws://${process.env.NEXT_PUBLIC_API_URL.replace('http://', '').replace('https://', '')}/api/v1/chat/ws`
-      : 'ws://localhost:8000/api/v1/chat/ws'
+    // Read token directly from localStorage - the single source of truth
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      console.log('[Chat] No token in localStorage, skipping WebSocket')
+      return
+    }
+
+    // Check expiration
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const expMs = (typeof payload.exp === 'string' ? parseInt(payload.exp, 10) : payload.exp) * 1000
+      if (expMs < Date.now()) {
+        console.error('[Chat] Token expired at', new Date(expMs).toISOString(), '- clearing and stopping')
+        localStorage.removeItem('access_token')
+        set({ error: 'Session expired. Please log in again.', isConnected: false })
+        return
+      }
+    } catch {
+      console.error('[Chat] Cannot decode token, skipping WebSocket')
+      return
+    }
+
+    // Disconnect stale client if present
+    if (existingClient) {
+      existingClient.disconnect()
+      set({ wsClient: null })
+    }
+
+    const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const wsUrl = rawUrl.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/api/v1/chat/ws'
 
     const client = new WebSocketClient(wsUrl, token, {
       onOpen: () => {
-        console.log('Chat WebSocket connected')
+        console.log('[Chat] WebSocket connected')
         set({ isConnected: true, error: null })
       },
-      onError: (error) => {
-        console.error('Chat WebSocket error:', error)
-        set({ error: 'Connection error' })
+      onError: () => {
+        console.warn('[Chat] WebSocket connection error — will retry if autoReconnect is enabled')
       },
-      onClose: () => {
-        console.log('Chat WebSocket disconnected')
-        set({ isConnected: false })
+      onClose: (event) => {
+        const wasStale = event.code === 1000
+        if (!wasStale) {
+          console.warn('[Chat] WebSocket closed:', { code: event.code, reason: event.reason })
+        }
+        const { wsClient: currentClient } = get()
+        if (currentClient === client) {
+          set({ isConnected: false, isProcessing: false })
+        }
+      },
+      onMessage: (message) => {
+        if (message.type === 'error') {
+          const data = message.data as { code?: string; message?: string }
+          if (data?.code !== 'AUTH_FAILED') {
+            set({ isProcessing: false, error: data?.message || 'An error occurred' })
+          }
+        }
+      },
+      onAuthFailure: () => {
+        console.error('[Chat] WebSocket auth failed — clearing session')
+        const { wsClient: currentClient } = get()
+        if (currentClient) {
+          currentClient.disconnect()
+        }
+        localStorage.removeItem('access_token')
+        set({ isConnected: false, wsClient: null, error: 'Session expired. Please log in again.' })
       },
       onAssistantResponse: (token: string, done: boolean, citations?: Citation[]) => {
         get().updateCurrentResponse(token, done, citations)
@@ -210,6 +274,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ isConnected: true, error: null })
         }
       },
+      getToken: () => localStorage.getItem('access_token'),
     })
 
     client.connect()
@@ -274,7 +339,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const token = localStorage.getItem('access_token')
       if (!token) throw new Error('No token found')
 
-      await chatApi.deleteConversation(id, token)
+      await chatApi.deleteConversation(id)
       set((state) => {
         const newMessages = { ...state.messages }
         delete newMessages[id]
@@ -298,7 +363,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const token = localStorage.getItem('access_token')
       if (!token) return
 
-      const updated = await chatApi.updateConversationTitle(conversationId, title, token)
+      const updated = await chatApi.updateConversationTitle(conversationId, title)
       set((state) => ({
         conversations: state.conversations.map((c) =>
           c.id === conversationId ? { ...c, title: updated.title } : c

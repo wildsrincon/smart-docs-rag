@@ -6,9 +6,9 @@ from typing import List, Optional, AsyncIterator
 from uuid import UUID
 from datetime import datetime, timezone
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,21 +23,69 @@ class ChatService:
 
     def __init__(self):
         self.vector_store = VectorStore()
-        self.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.chat_llm = ChatOpenAI(
-            model=settings.OPENAI_CHAT_MODEL,
-            api_key=settings.OPENAI_API_KEY,
+        self._embeddings = self._build_embeddings()
+        self.chat_llm: BaseChatModel = self._build_chat_llm()
+
+    @staticmethod
+    def _build_embeddings():
+        provider = settings.embedding_provider
+        if provider == "google":
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+            return GoogleGenerativeAIEmbeddings(
+                model=settings.GOOGLE_EMBEDDING_MODEL,
+                google_api_key=settings.GOOGLE_AI_API_KEY,
+            )
+        return AsyncOpenAI(
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url,
+        )
+
+    @staticmethod
+    def _build_chat_llm() -> BaseChatModel:
+        provider = settings.llm_provider
+        if provider == "gemini":
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+            return ChatGoogleGenerativeAI(
+                model=settings.GEMINI_CHAT_MODEL,
+                google_api_key=settings.GOOGLE_AI_API_KEY,
+                temperature=0.7,
+                streaming=True,
+            )
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=settings.chat_model,
+            api_key=settings.chat_api_key,
+            base_url=settings.chat_base_url,
             temperature=0.7,
             streaming=True,
         )
 
     async def generate_query_embedding(self, query: str) -> List[float]:
-        """Generate embedding for user query"""
+        """Generate embedding for a user query."""
         try:
-            response = await self.openai_client.embeddings.create(
-                model=settings.OPENAI_EMBEDDING_MODEL, input=query
-            )
-            return response.data[0].embedding
+            provider = settings.embedding_provider
+            if provider == "google":
+                embedding = await self._embeddings.aembed_query(query)
+            else:
+                response = await self._embeddings.embeddings.create(
+                    model=settings.embedding_model,
+                    input=query,
+                    extra_body={
+                        "input_type": "query",
+                        "output_dimension": settings.EMBEDDING_DIMENSION,
+                    },
+                )
+                embedding = response.data[0].embedding
+
+            if not isinstance(embedding, list):
+                raise ValueError(
+                    f"Embedding provider returned unexpected type: {type(embedding)!r}"
+                )
+            logger.info(f"Query embedding generated: dim={len(embedding)}")
+            return embedding
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")
             raise

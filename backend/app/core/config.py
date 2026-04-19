@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Fullstack Starter Kit"
 
-    # Security
-    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    # Security — no default; app will refuse to start if SECRET_KEY is not set in .env
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -34,10 +34,146 @@ class Settings(BaseSettings):
         # Use psycopg2 driver for sync operations with configured server
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:5432/{self.POSTGRES_DB}"
 
-    # OpenAI Configuration
+    # OpenAI/Voyage AI Configuration
     OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+
+    # ZhipuAI (GLM) Configuration
+    ZHIPUAI_API_KEY: str = ""
+    ZHIPUAI_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4/"
+    ZHIPUAI_EMBEDDING_MODEL: str = "embedding-3"
+    ZHIPUAI_CHAT_MODEL: str = "glm-4.5"
+
+    # Google Gemini Configuration
+    GOOGLE_AI_API_KEY: str = ""
+    GEMINI_CHAT_MODEL: str = "gemini-2.1-flash"
+    GOOGLE_EMBEDDING_MODEL: str = "models/text-embedding-004"
+
+    # LLM Provider: "gemini" | "zhipuai" | "openai" (default: auto-detect)
+    LLM_PROVIDER: str = ""
+
+    # Voyage AI Configuration (embeddings) — optional fallback
+    VOYAGE_API_KEY: str = ""
+    VOYAGE_BASE_URL: str = "https://api.voyageai.com/v1/"
+    VOYAGE_EMBEDDING_MODEL: str = "voyage-4-lite"
+
+    # Embedding Provider: "google" | "voyage" | "zhipuai" | "openai" (default: auto-detect)
+    EMBEDDING_PROVIDER: str = ""
+    EMBEDDING_DIMENSION: int = 768
+
+    @property
+    def is_voyage_ai(self) -> bool:
+        return bool(self.VOYAGE_API_KEY)
+
+    # --- Chat LLM provider resolution ---
+
+    @property
+    def llm_provider(self) -> str:
+        if self.LLM_PROVIDER:
+            return self.LLM_PROVIDER.lower()
+        if self.GOOGLE_AI_API_KEY:
+            return "gemini"
+        if self.ZHIPUAI_API_KEY:
+            return "zhipuai"
+        return "openai"
+
+    @property
+    def chat_api_key(self) -> str:
+        provider = self.llm_provider
+        if provider == "gemini":
+            return self.GOOGLE_AI_API_KEY
+        if provider == "zhipuai":
+            return self.ZHIPUAI_API_KEY
+        return self.OPENAI_API_KEY
+
+    @property
+    def chat_base_url(self) -> str | None:
+        provider = self.llm_provider
+        if provider == "gemini":
+            return None
+        if provider == "zhipuai":
+            return self.ZHIPUAI_BASE_URL
+        if self.OPENAI_API_KEY and self.OPENAI_BASE_URL:
+            return self.OPENAI_BASE_URL
+        return None
+
+    @property
+    def chat_model(self) -> str:
+        provider = self.llm_provider
+        if provider == "gemini":
+            return self.GEMINI_CHAT_MODEL
+        if provider == "zhipuai":
+            return self.ZHIPUAI_CHAT_MODEL
+        return self.OPENAI_CHAT_MODEL
+
+    # --- Embedding configuration (Google > Voyage AI > ZhipuAI > OpenAI) ---
+
+    @property
+    def embedding_provider(self) -> str:
+        if self.EMBEDDING_PROVIDER:
+            return self.EMBEDDING_PROVIDER.lower()
+        if self.GOOGLE_AI_API_KEY:
+            return "google"
+        if self.VOYAGE_API_KEY:
+            return "voyage"
+        if self.ZHIPUAI_API_KEY:
+            return "zhipuai"
+        return "openai"
+
+    @property
+    def embedding_api_key(self) -> str:
+        provider = self.embedding_provider
+        if provider == "google":
+            return self.GOOGLE_AI_API_KEY
+        if provider == "voyage":
+            return self.VOYAGE_API_KEY
+        if provider == "zhipuai":
+            return self.ZHIPUAI_API_KEY
+        return self.OPENAI_API_KEY
+
+    @property
+    def embedding_base_url(self) -> str | None:
+        provider = self.embedding_provider
+        if provider == "google":
+            return None
+        if provider == "voyage":
+            return self.VOYAGE_BASE_URL
+        if provider == "zhipuai":
+            return self.ZHIPUAI_BASE_URL
+        if self.OPENAI_API_KEY and self.OPENAI_BASE_URL:
+            return self.OPENAI_BASE_URL
+        return None
+
+    @property
+    def embedding_model(self) -> str:
+        provider = self.embedding_provider
+        if provider == "google":
+            return self.GOOGLE_EMBEDDING_MODEL
+        if provider == "voyage":
+            return self.VOYAGE_EMBEDDING_MODEL
+        if provider == "zhipuai":
+            return self.ZHIPUAI_EMBEDDING_MODEL
+        return self.OPENAI_EMBEDDING_MODEL
+
+    # --- Legacy aliases (backwards compatibility) ---
+
+    @property
+    def active_api_key(self) -> str:
+        return self.chat_api_key
+
+    @property
+    def active_base_url(self) -> str | None:
+        return self.chat_base_url
+
+    @property
+    def active_embedding_model(self) -> str:
+        return self.embedding_model
+
+    @property
+    def active_chat_model(self) -> str:
+        return self.chat_model
 
     # RAG Configuration
     CHUNK_MIN_TOKENS: int = 500
@@ -48,11 +184,15 @@ class Settings(BaseSettings):
 
     # Document Processing
     MAX_FILE_SIZE_MB: int = 10
-    SUPPORTED_FILE_EXTENSIONS: str = "pdf,docx,xlsx,xls,pptx,txt,md"
+    SUPPORTED_FILE_EXTENSIONS: str = "pdf,docx,xlsx,xls,pptx,txt,md,csv"
 
     # Rate Limiting
     MAX_UPLOADS_PER_MINUTE: int = 10
     MAX_CHAT_QUERIES_PER_MINUTE: int = 60
+
+    # Redis — optional; enables cross-worker WebSocket notifications
+    # Set to redis://localhost:6379/0 (or redis://redis:6379/0 in Docker)
+    REDIS_URL: str = ""
 
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID: str = ""

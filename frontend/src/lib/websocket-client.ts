@@ -3,6 +3,7 @@ import type {
   UserQueryMessage,
   AssistantResponseMessage,
   ErrorMessage,
+  ErrorData,
   StatusMessage,
   DocumentStatusMessage,
   Citation,
@@ -13,20 +14,23 @@ export interface WebSocketClientOptions {
   onError?: (error: Event) => void
   onClose?: (event: CloseEvent) => void
   onOpen?: (event: Event) => void
+  onAuthFailure?: () => void
   onAssistantResponse?: (token: string, done: boolean, citations?: Citation[]) => void
   onStatus?: (state: string, conversationId?: string) => void
   onDocumentStatus?: (documentId: string, status: string, progress: number) => void
   autoReconnect?: boolean
   reconnectInterval?: number
+  getToken?: () => string | null
 }
 
 export class WebSocketClient {
   private ws: WebSocket | null = null
   private url: string
   private token: string
-  private options: Required<WebSocketClientOptions>
+  private options: Omit<Required<WebSocketClientOptions>, 'getToken'> & { getToken: () => string | null }
   private reconnectTimeout: NodeJS.Timeout | null = null
   private isConnecting = false
+  private isDestroyed = false
 
   constructor(url: string, token: string, options: WebSocketClientOptions = {}) {
     this.url = url
@@ -36,25 +40,48 @@ export class WebSocketClient {
       onError: options.onError || (() => {}),
       onClose: options.onClose || (() => {}),
       onOpen: options.onOpen || (() => {}),
+      onAuthFailure: options.onAuthFailure || (() => {}),
       onAssistantResponse: options.onAssistantResponse || (() => {}),
       onStatus: options.onStatus || (() => {}),
       onDocumentStatus: options.onDocumentStatus || (() => {}),
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval ?? 3000,
+      getToken: options.getToken ?? (() => null),
     }
   }
 
   connect(): void {
+    if (this.isDestroyed) return
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
-      console.log('WebSocket already connected or connecting')
+      console.log('[WS] Already connected or connecting')
       return
+    }
+
+    const freshToken = this.options.getToken()
+    if (freshToken) {
+      this.token = freshToken
+      console.log('[WS] Using fresh token from getToken(), length:', freshToken.length)
+    } else {
+      console.log('[WS] No fresh token from getToken(), using original token, length:', this.token.length)
+    }
+
+    try {
+      const tokenPayload = JSON.parse(atob(this.token.split('.')[1]))
+      console.log('[WS] Token exp:', new Date(tokenPayload.exp * 1000).toISOString(), 'sub:', tokenPayload.sub)
+      if (tokenPayload.exp && tokenPayload.exp * 1000 < Date.now()) {
+        console.error('[WS] Token is EXPIRED — not connecting, triggering auth failure')
+        this.options.onAuthFailure()
+        return
+      }
+    } catch {
+      console.error('[WS] Cannot decode token, attempting connection anyway')
     }
 
     this.isConnecting = true
 
     try {
       const wsUrl = `${this.url}?token=${this.token}`
-      console.log('Connecting to WebSocket:', wsUrl)
+      console.log('[WS] Connecting to:', this.url)
       this.ws = new WebSocket(wsUrl)
 
       this.ws.onopen = (event) => {
@@ -75,17 +102,28 @@ export class WebSocketClient {
       }
 
       this.ws.onerror = (event) => {
-        console.error('WebSocket error:', event)
+        if (this.isDestroyed) return
+        console.warn('[WS] Connection error (expected during StrictMode cleanup or reconnect)')
         this.isConnecting = false
         this.options.onError(event)
       }
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason)
+        console.warn('[WS] Closed:', {
+          code: event.code,
+          reason: event.reason || '(no reason)',
+          wasClean: event.wasClean,
+        })
         this.isConnecting = false
+        this.ws = null
         this.options.onClose(event)
 
-        // Attempt to reconnect if enabled
+        if (event.code === 1008) {
+          console.error('[WS] Auth failure (1008) — stopping reconnect')
+          this.options.onAuthFailure()
+          return
+        }
+
         if (this.options.autoReconnect && event.code !== 1000) {
           this.scheduleReconnect()
         }
@@ -97,6 +135,7 @@ export class WebSocketClient {
   }
 
   disconnect(): void {
+    this.isDestroyed = true
     this.clearReconnectTimeout()
 
     if (this.ws) {
@@ -142,7 +181,17 @@ export class WebSocketClient {
         break
 
       case 'error':
-        console.error('WebSocket error message:', message.data)
+        const errorData = message.data as ErrorData
+        if (!errorData || (!errorData.code && !errorData.message)) {
+          console.error('WebSocket error: unknown error (empty data)')
+        } else {
+          console.error('WebSocket error message:', errorData)
+
+          // Handle authentication failure
+          if (errorData.code === 'AUTH_FAILED') {
+            this.options.onAuthFailure()
+          }
+        }
         break
 
       default:
@@ -151,12 +200,14 @@ export class WebSocketClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.isDestroyed) return
     if (this.reconnectTimeout) {
       return
     }
 
     console.log(`Scheduling reconnect in ${this.options.reconnectInterval}ms`)
     this.reconnectTimeout = setTimeout(() => {
+      if (this.isDestroyed) return
       console.log('Attempting to reconnect...')
       this.connect()
       this.reconnectTimeout = null

@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, PanelLeft } from 'lucide-react'
 import { useChatStore } from '@/store/chat'
 import { useDocumentStore } from '@/store/documents'
+import { useAuthStore } from '@/store/auth'
 import ChatSidebar from '@/components/chat/ChatSidebar'
 import MessageList from '@/components/chat/MessageList'
 import ChatInput from '@/components/chat/ChatInput'
 import { cn } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
 
 export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const router = useRouter()
   const {
     conversations,
     createConversation,
@@ -29,12 +32,43 @@ export default function ChatPage() {
     clearError,
   } = useChatStore()
   const { selectedDocumentId, fetchDocuments } = useDocumentStore()
+  const { isAuthenticated, token } = useAuthStore()
+  const disconnectWebSocket = useChatStore((state) => state.disconnectWebSocket)
+
+  const hasConnectedRef = useRef(false)
 
   useEffect(() => {
+    if (!isAuthenticated || !token) {
+      router.push('/login')
+      return
+    }
+
     fetchConversations()
     fetchDocuments()
-    connectWebSocket()
-  }, [fetchConversations, fetchDocuments, connectWebSocket])
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      hasConnectedRef.current = true
+      connectWebSocket()
+    }, 150)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, token])
+
+  useEffect(() => {
+    return () => {
+      if (hasConnectedRef.current) {
+        disconnectWebSocket()
+        hasConnectedRef.current = false
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (window.innerWidth < 768) {

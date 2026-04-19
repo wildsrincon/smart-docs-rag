@@ -43,9 +43,15 @@ export default function DashboardPage() {
     totalQueries: 0,
   }
 
-  async function handleDelete(id: string) {
-    if (confirm('Are you sure you want to delete this document?')) {
+  async function handleDelete(id: string): Promise<boolean> {
+    if (!confirm('Are you sure you want to delete this document?')) {
+      return false
+    }
+    try {
       await deleteDocument(id)
+      return true
+    } catch {
+      return false
     }
   }
 

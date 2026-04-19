@@ -15,12 +15,12 @@ class TestVectorStore:
     @pytest.fixture
     def vector_store(self):
         """Create vector store instance"""
-        return VectorStore(embedding_dimension=1536)
+        return VectorStore(embedding_dimension=512)
 
     @pytest.fixture
     def mock_embedding(self):
-        """Create mock embedding vector (1536 dimensions)"""
-        return [0.1] * 1536
+        """Create mock embedding vector (512 dimensions — matches Vector(512) column)"""
+        return [0.1] * 512
 
     @pytest.fixture
     def test_user_id(self, test_user):

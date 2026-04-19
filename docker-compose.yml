@@ -25,19 +25,26 @@ services:
     container_name: fastapi_backend
     ports:
       - "8000:8000"
+    # API keys and secrets are read directly from backend/.env
+    # No need to duplicate them in the root .env
+    env_file:
+      - ./backend/.env
     environment:
-      # Database Configuration
+      # Database — override backend/.env values with Docker service names
       DATABASE_URL: postgresql://postgres:postgres@db:5432/app_db
       POSTGRES_SERVER: db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: app_db
-      # Security
-      SECRET_KEY: dev-secret-key-change-in-production-do-not-use-in-production
-      # OpenAI Configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Fixed config — doesn't change between environments
       OPENAI_EMBEDDING_MODEL: text-embedding-3-small
       OPENAI_CHAT_MODEL: gpt-4o-mini
+      ZHIPUAI_BASE_URL: https://open.bigmodel.cn/api/paas/v4/
+      ZHIPUAI_EMBEDDING_MODEL: embedding-3
+      ZHIPUAI_CHAT_MODEL: glm-4.5
+      VOYAGE_BASE_URL: https://api.voyageai.com/v1/
+      VOYAGE_EMBEDDING_MODEL: voyage-4-lite
+      GOOGLE_REDIRECT_URI: http://localhost:3000/auth/callback/google
       # RAG Configuration
       CHUNK_MIN_TOKENS: 500
       CHUNK_MAX_TOKENS: 800
@@ -50,12 +57,12 @@ services:
       # Rate Limiting
       MAX_UPLOADS_PER_MINUTE: 10
       MAX_CHAT_QUERIES_PER_MINUTE: 60
-      # Google OAuth Configuration
-      GOOGLE_CLIENT_ID: 828519900748-fatb6685t5k8e5cmq4jose6skf7qemhr.apps.googleusercontent.com
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_REDIRECT_URI: http://localhost:3000/auth/callback/google
+      # Redis — cross-worker WebSocket notifications
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -76,11 +83,16 @@ services:
       - ./frontend:/app
       - /app/node_modules
 
-  # Puedes agregar redis aquí para el Proyecto 2
-  # redis:
-  #   image: redis:alpine
-  #   ports:
-  #     - "6379:6379"
+  redis:
+    image: redis:7-alpine
+    container_name: smart_docs_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   postgres_data:

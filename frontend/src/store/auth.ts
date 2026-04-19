@@ -53,15 +53,23 @@ export const useAuthStore = create<AuthState>()(
         try {
           const token = localStorage.getItem('access_token')
           if (token) {
+            // Verify token FIRST before checking state
             const result = await authApi.verifyToken(token)
             if (result.valid) {
+              console.log('[restoreSession] Token valid, restoring session for user:', result.email)
+              // Only update state if token is valid, DON'T clear it
               set({ isAuthenticated: true, token })
               await get().fetchUser()
             } else {
-              throw new Error('Invalid token')
+              console.warn('[restoreSession] Token invalid, clearing session')
+              // Only clear token if backend confirms it's invalid
+              localStorage.removeItem('access_token')
+              removeTokenCookie()
+              set({ user: null, token: null, isAuthenticated: false })
             }
           }
         } catch (error) {
+          console.error('[restoreSession] Error restoring session:', error)
           localStorage.removeItem('access_token')
           removeTokenCookie()
           set({ user: null, token: null, isAuthenticated: false })

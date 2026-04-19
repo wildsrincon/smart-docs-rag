@@ -10,7 +10,7 @@ interface DocumentPreviewProps {
   open: boolean
   onClose: () => void
   onChat: (documentId: string) => void
-  onDelete: (documentId: string) => void
+  onDelete: (documentId: string) => Promise<boolean> | boolean
 }
 
 export default function DocumentPreview({ document, open, onClose, onChat, onDelete }: DocumentPreviewProps) {
@@ -111,7 +111,7 @@ export default function DocumentPreview({ document, open, onClose, onChat, onDel
             Chat with this document
           </button>
           <button
-            onClick={() => { onDelete(document.id); onClose() }}
+            onClick={async () => { const ok = await onDelete(document.id); if (ok) onClose() }}
             className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
             title="Delete"
           >

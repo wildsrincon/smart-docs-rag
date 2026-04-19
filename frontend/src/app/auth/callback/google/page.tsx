@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import axios from 'axios'
 import { useAuthStore } from '@/store/auth'
 import { authApi } from '@/lib/api'
 
@@ -15,7 +16,6 @@ export default function GoogleCallbackPage() {
 
   useEffect(() => {
     const handleGoogleCallback = async () => {
-      // Prevent multiple executions (Next.js dev mode renders twice)
       if (isProcessing.current) {
         return
       }
@@ -31,60 +31,90 @@ export default function GoogleCallbackPage() {
       }
 
       try {
-        // Exchange code for token
-        const tokenResponse = await authApi.googleCallback(code, state)
+        console.log('[GoogleCallback] Starting callback with code:', code.substring(0, 10) + '...')
 
-        // Update auth store with authenticated state FIRST
+        localStorage.removeItem('access_token')
+        document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax'
+        useAuthStore.setState({
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+        })
+        console.log('[GoogleCallback] Cleared old auth state')
+
+        const tokenResponse = await authApi.googleCallback(code, state)
+        console.log('[GoogleCallback] Backend response received, access_token length:', tokenResponse.access_token?.length)
+
+        if (!tokenResponse.access_token) {
+          throw new Error('No access_token in response from backend')
+        }
+
+        try {
+          const newPayload = JSON.parse(atob(tokenResponse.access_token.split('.')[1]))
+          console.log('[GoogleCallback] New token exp:', new Date(newPayload.exp * 1000).toISOString(), 'sub:', newPayload.sub)
+        } catch {
+          console.warn('[GoogleCallback] Could not decode new token payload')
+        }
+
         useAuthStore.setState({
           token: tokenResponse.access_token,
           isAuthenticated: true,
           isLoading: false,
           error: null,
         })
+        console.log('[GoogleCallback] Auth store updated with new token')
 
-        // Store token in localStorage for persistence
         localStorage.setItem('access_token', tokenResponse.access_token)
 
-        // Set cookie for server-side auth
         if (typeof window !== 'undefined') {
-          const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+          const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
           document.cookie = `access_token=${tokenResponse.access_token}; path=/; expires=${expires.toUTCString()}; SameSite=Lax`
         }
+        console.log('[GoogleCallback] Token saved to localStorage and cookie')
 
-        // Fetch user data
         await fetchUser()
+        console.log('[GoogleCallback] User data fetched, login complete')
 
         setStatus('success')
 
-        // Redirect to dashboard after a short delay
         setTimeout(() => {
           router.push('/dashboard')
           router.refresh()
         }, 1000)
       } catch (err) {
-        console.error('Google OAuth callback error:', err)
-        setError(err instanceof Error ? err.message : 'Failed to authenticate with Google')
+        console.error('[GoogleCallback] OAuth callback error:', err)
+        let message = 'Failed to authenticate with Google'
+        if (axios.isAxiosError(err)) {
+          if (err.message === 'Network Error') {
+            message = 'Unable to connect to server. Please check your connection and try again.'
+          } else if (err.response?.status === 429) {
+            message = 'Too many login attempts. Please wait and try again.'
+          } else if (err.response?.data?.detail) {
+            message = err.response.data.detail
+          } else if (err.response?.status === 500) {
+            message = 'Server error occurred. Please try again later.'
+          }
+        }
+        setError(message)
         setStatus('error')
 
-        // Clear any partial auth state
         useAuthStore.setState({
           token: null,
           isAuthenticated: false,
           isLoading: false,
-          error: err instanceof Error ? err.message : 'Failed to authenticate',
+          error: message,
         })
         localStorage.removeItem('access_token')
 
-        // Redirect to login page after a delay
         setTimeout(() => {
           router.push('/login')
         }, 3000)
       }
-      // Don't reset isProcessing.current - prevent any re-execution
     }
 
     handleGoogleCallback()
-  }, []) // Empty dependency array - run only once
+  }, [])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">

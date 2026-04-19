@@ -4,9 +4,8 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import array
 
 from app.entities.chunk import Chunk
 from app.rag.chunker import Chunker
@@ -14,10 +13,21 @@ from app.rag.chunker import Chunker
 logger = logging.getLogger(__name__)
 
 
+def _to_pgvector_literal(embedding: List[float], dim: int) -> str:
+    """Convert a Python list of floats to a pgvector SQL literal: '[v1,v2,...]'::vector(dim).
+
+    This bypasses pgvector's SQLAlchemy bind_processor entirely — the string is
+    interpolated directly into the SQL as a typed literal, so neither asyncpg nor
+    SQLAlchemy need to know about the vector type at the parameter-binding stage.
+    """
+    vec_str = "[" + ",".join(str(float(v)) for v in embedding) + "]"
+    return f"'{vec_str}'::vector({dim})"
+
+
 class VectorStore:
     """Custom pgvector wrapper for RAG platform"""
 
-    def __init__(self, embedding_dimension: int = 1536):
+    def __init__(self, embedding_dimension: int = 768):
         self.embedding_dimension = embedding_dimension
 
     async def similarity_search(
@@ -35,7 +45,7 @@ class VectorStore:
         Args:
             db: Async database session
             user_id: User UUID for isolation (security)
-            query_embedding: Query vector (1536 dimensions)
+            query_embedding: Query vector (768 dimensions for text-embedding-004)
             limit: Number of results to return
             document_ids: Optional filter for specific documents
             threshold: Optional similarity threshold (0-1)
@@ -55,18 +65,23 @@ class VectorStore:
             if document_ids:
                 query = query.where(Chunk.document_id.in_(document_ids))
 
-            # Order by cosine distance (lower is better) using <=> operator
-            query = query.order_by(
-                text(f"embedding <=> ARRAY{query_embedding}::vector")
-            ).limit(limit)
+            # Build the vector literal as a raw SQL string to bypass pgvector's
+            # SQLAlchemy bind_processor which is incompatible with asyncpg.
+            # The embedding values are floats from our own API, not user input.
+            vec_literal = _to_pgvector_literal(
+                query_embedding, self.embedding_dimension
+            )
+            distance_sql = text(f"embedding <=> {vec_literal}")
+
+            # Order by cosine distance (lower is better)
+            query = query.order_by(distance_sql).limit(limit)
 
             # Apply threshold if provided
             if threshold:
-                # Convert threshold (cosine similarity) to distance (1 - similarity)
                 distance_threshold = 1.0 - threshold
                 query = query.where(
                     text(
-                        f"(embedding <=> ARRAY{query_embedding}::vector) <= {distance_threshold}"
+                        f"(embedding <=> {vec_literal}) <= {float(distance_threshold)}"
                     )
                 )
 
@@ -127,18 +142,18 @@ class VectorStore:
             Number of chunks deleted
         """
         try:
-            result = await db.execute(
-                select(Chunk).where(Chunk.document_id == document_id)
+            count_result = await db.execute(
+                select(func.count())
+                .select_from(Chunk)
+                .where(Chunk.document_id == document_id)
             )
-            chunks = result.scalars().all()
+            count = count_result.scalar_one()
 
-            for chunk in chunks:
-                await db.delete(chunk)
-
+            await db.execute(delete(Chunk).where(Chunk.document_id == document_id))
             await db.flush()
 
-            logger.info(f"Deleted {len(chunks)} chunks for document {document_id}")
-            return len(chunks)
+            logger.info(f"Deleted {count} chunks for document {document_id}")
+            return count
 
         except Exception as e:
             logger.error(f"Error deleting chunks: {e}")
@@ -159,13 +174,15 @@ class VectorStore:
             Number of chunks
         """
         try:
-            query = select(Chunk).where(Chunk.user_id == user_id)
+            query = (
+                select(func.count()).select_from(Chunk).where(Chunk.user_id == user_id)
+            )
 
             if document_id:
                 query = query.where(Chunk.document_id == document_id)
 
             result = await db.execute(query)
-            return len(result.scalars().all())
+            return result.scalar_one()
 
         except Exception as e:
             logger.error(f"Error getting chunk count: {e}")

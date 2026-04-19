@@ -103,10 +103,13 @@ class ChatService:
             await db.flush()
 
             # Update conversation timestamp
-            await db.execute(
+            result = await db.execute(
                 select(Conversation).where(Conversation.id == conversation_id)
             )
-            # Note: We need to actually update, but this is simplified
+            conv = result.scalar_one_or_none()
+            if conv:
+                conv.updated_at = datetime.now(timezone.utc)
+                await db.flush()
 
             logger.info(
                 f"Created message: {message.id} in conversation {conversation_id}"

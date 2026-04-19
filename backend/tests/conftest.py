@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures for RAG platform tests"""
 
 import asyncio
+import os
 from typing import AsyncGenerator, Generator
 
 import pytest
@@ -9,8 +10,22 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from app.main import app
-from app.core.config import settings
 from app.database.base import Base
+
+# Safety guard: tests MUST use a dedicated database.
+# Without this, tests drop/recreate tables against the production DB.
+# Set TEST_DATABASE_URL in your environment before running pytest.
+# Example: postgresql+asyncpg://postgres:postgres@localhost:5432/test_app_db
+_TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+if not _TEST_DATABASE_URL:
+    raise RuntimeError(
+        "\n\nTEST_DATABASE_URL is not set.\n"
+        "Tests require a dedicated database to avoid destroying production data.\n"
+        "Example:\n"
+        "  export TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/test_app_db\n"
+        "  createdb test_app_db  # create it once\n"
+        "  pytest\n"
+    )
 
 # Import all models to ensure they are registered with SQLAlchemy's metadata
 from app.entities import (
@@ -28,7 +43,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Create async database session for tests"""
     # Create fresh engine for each test to avoid event loop issues
     engine = create_async_engine(
-        settings.async_db_url,
+        _TEST_DATABASE_URL,
         echo=False,
         pool_pre_ping=True,
     )

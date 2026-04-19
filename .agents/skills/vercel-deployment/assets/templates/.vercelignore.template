@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage/
+test-results/
+playwright-report/
+__tests__/
+*.test.*
+*.spec.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+Dockerfile
+docker/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Misc
+.git/
+.gitignore
+.vercel/
