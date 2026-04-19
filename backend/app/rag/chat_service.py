@@ -35,6 +35,7 @@ class ChatService:
             return GoogleGenerativeAIEmbeddings(
                 model=settings.GOOGLE_EMBEDDING_MODEL,
                 google_api_key=settings.GOOGLE_AI_API_KEY,
+                output_dimensionality=settings.EMBEDDING_DIMENSION,
             )
         return AsyncOpenAI(
             api_key=settings.embedding_api_key,

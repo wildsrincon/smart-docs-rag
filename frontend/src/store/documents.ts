@@ -12,7 +12,7 @@ interface DocumentState {
 
   // Actions
   fetchDocuments: () => Promise<void>
-  uploadDocument: (file: File) => Promise<Document>
+  uploadDocument: (file: File, onProgress?: (progress: number) => void) => Promise<Document>
   deleteDocument: (id: string) => Promise<void>
   selectDocument: (id: string | null) => void
   updateIngestionStatus: (documentId: string, status: IngestionStatus, progress: number) => void
@@ -40,10 +40,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     }
   },
 
-  uploadDocument: async (file: File) => {
+  uploadDocument: async (file: File, onProgress?: (progress: number) => void) => {
     set({ loading: true, error: null })
     try {
-      const document = await documentsApi.upload(file)
+      const document = await documentsApi.upload(file, onProgress)
       set((state) => ({
         documents: [document, ...state.documents],
         loading: false,

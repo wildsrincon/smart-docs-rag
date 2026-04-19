@@ -8,13 +8,13 @@ import { Upload, X, Loader2, CheckCircle2, AlertCircle, FileUp } from 'lucide-re
 interface UploadModalProps {
   open: boolean
   onClose: () => void
-  onUpload: (files: File[]) => Promise<void>
+  onUpload: (file: File, onProgress: (progress: number) => void) => Promise<void>
 }
 
 interface UploadFile {
   file: File
   progress: number
-  status: 'pending' | 'uploading' | 'success' | 'error'
+  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error'
   error?: string
 }
 
@@ -43,24 +43,39 @@ export default function UploadModal({ open, onClose, onUpload }: UploadModalProp
     if (files.length === 0 || uploading) return
     setUploading(true)
 
-    const pendingFiles = files.filter(f => f.status === 'pending' || f.status === 'error')
-    setFiles(prev => prev.map(f =>
-      pendingFiles.includes(f) ? { ...f, status: 'uploading' as const, progress: 0 } : f
+    const pendingIndices = files
+      .map((f, i) => (f.status === 'pending' || f.status === 'error') ? i : -1)
+      .filter(i => i !== -1)
+
+    setFiles(prev => prev.map((f, i) =>
+      pendingIndices.includes(i) ? { ...f, status: 'uploading' as const, progress: 0 } : f
     ))
 
-    try {
-      const fileToUpload = pendingFiles.map(f => f.file)
-      await onUpload(fileToUpload)
-      setFiles(prev => prev.map(f =>
-        pendingFiles.includes(f) ? { ...f, status: 'success' as const, progress: 100 } : f
-      ))
-    } catch {
-      setFiles(prev => prev.map(f =>
-        pendingFiles.includes(f) ? { ...f, status: 'error' as const, error: 'Upload failed' } : f
-      ))
-    } finally {
-      setUploading(false)
+    for (const idx of pendingIndices) {
+      const currentFile = files[idx]
+      try {
+        await onUpload(currentFile.file, (progress) => {
+          setFiles(prev => prev.map((f, i) =>
+            i === idx ? { ...f, progress: Math.min(progress, 95) } : f
+          ))
+        })
+        setFiles(prev => prev.map((f, i) =>
+          i === idx ? { ...f, status: 'processing' as const, progress: 95 } : f
+        ))
+        // Brief processing state before marking success
+        setTimeout(() => {
+          setFiles(prev => prev.map((f, i) =>
+            i === idx && f.status === 'processing' ? { ...f, status: 'success' as const, progress: 100 } : f
+          ))
+        }, 800)
+      } catch {
+        setFiles(prev => prev.map((f, i) =>
+          i === idx ? { ...f, status: 'error' as const, error: 'Upload failed' } : f
+        ))
+      }
     }
+
+    setUploading(false)
   }, [files, uploading, onUpload])
 
   const clearCompleted = useCallback(() => {
@@ -151,10 +166,10 @@ export default function UploadModal({ open, onClose, onUpload }: UploadModalProp
               {dragActive ? 'Drop files here' : 'Drop files or click to upload'}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              PDF, DOCX, XLSX, PPTX, TXT, MD, PNG, JPG, GIF
+              PDF, DOCX, XLSX, PPTX, TXT, MD, CSV
             </p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-              Max 50MB per file
+              Max 100MB per file
             </p>
           </div>
 
@@ -202,11 +217,24 @@ export default function UploadModal({ open, onClose, onUpload }: UploadModalProp
                           {formatFileSize(item.file.size)}
                         </p>
 
-                        {item.status === 'uploading' && (
+                        {(item.status === 'uploading' || item.status === 'processing') && (
                           <div className="mt-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                {item.status === 'uploading' ? 'Uploading...' : 'Processing...'}
+                              </span>
+                              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                {item.progress}%
+                              </span>
+                            </div>
                             <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-primary-500 to-primary-600 rounded-full transition-all duration-300"
+                                className={cn(
+                                  'h-full rounded-full transition-all duration-500 ease-out',
+                                  item.status === 'processing'
+                                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 animate-pulse'
+                                    : 'bg-gradient-to-r from-primary-500 to-primary-600'
+                                )}
                                 style={{ width: `${item.progress}%` }}
                               />
                             </div>
@@ -217,6 +245,9 @@ export default function UploadModal({ open, onClose, onUpload }: UploadModalProp
                       <div className="flex-shrink-0 flex items-center gap-2">
                         {item.status === 'uploading' && (
                           <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
+                        )}
+                        {item.status === 'processing' && (
+                          <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
                         )}
                         {item.status === 'success' && (
                           <CheckCircle2 className="w-5 h-5 text-green-500" />

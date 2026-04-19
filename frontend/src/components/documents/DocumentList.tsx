@@ -3,7 +3,7 @@
 import type { Document } from '@/types/api'
 import { cn } from '@/lib/utils'
 import { getFileConfig, formatFileSize, formatDate, getStatusConfig } from '@/lib/document-utils'
-import { MessageSquare, Eye, Trash2, FileText } from 'lucide-react'
+import { MessageSquare, Eye, Trash2, FileText, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 
 interface DocumentListProps {
   documents: Document[]
@@ -37,8 +37,10 @@ function SkeletonRow() {
 }
 
 const SortIcon = ({ field, sortField, sortDir }: { field: string; sortField?: string; sortDir?: 'asc' | 'desc' }) => {
-  if (field !== sortField) return <span className="text-slate-300 dark:text-slate-600 ml-1">&#8693;</span>
-  return <span className="text-primary-500 ml-1">{sortDir === 'asc' ? '&#8593;' : '&#8595;'}</span>
+  if (field !== sortField) return <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600 ml-1 inline" />
+  return sortDir === 'asc'
+    ? <ArrowUp className="w-3 h-3 text-primary-500 ml-1 inline" />
+    : <ArrowDown className="w-3 h-3 text-primary-500 ml-1 inline" />
 }
 
 export default function DocumentList({ documents, onSelectForChat, onDelete, onPreview, loading, sortField, sortDir, onSort }: DocumentListProps) {
@@ -146,7 +148,7 @@ export default function DocumentList({ documents, onSelectForChat, onDelete, onP
                   <MessageSquare className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => onDelete(doc.id)}
+                  onClick={() => { if (window.confirm('Are you sure you want to delete this document?')) onDelete(doc.id) }}
                   className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 transition-colors"
                   title="Delete"
                 >

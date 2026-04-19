@@ -4,11 +4,10 @@ import {
   File,
   FileCode,
   Presentation,
-  FileImage,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-export type FileType = 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'txt' | 'md' | 'png' | 'jpg' | 'jpeg' | 'gif'
+export type FileType = 'pdf' | 'docx' | 'xlsx' | 'xls' | 'pptx' | 'txt' | 'md' | 'csv'
 
 export interface FileTypeConfig {
   label: string
@@ -40,6 +39,13 @@ export const FILE_TYPE_CONFIG: Record<FileType, FileTypeConfig> = {
     bgDark: 'dark:bg-green-900/30',
     icon: FileSpreadsheet,
   },
+  xls: {
+    label: 'XLS',
+    color: 'text-green-500',
+    bgLight: 'bg-green-100',
+    bgDark: 'dark:bg-green-900/30',
+    icon: FileSpreadsheet,
+  },
   pptx: {
     label: 'PPTX',
     color: 'text-orange-500',
@@ -61,33 +67,12 @@ export const FILE_TYPE_CONFIG: Record<FileType, FileTypeConfig> = {
     bgDark: 'dark:bg-purple-900/30',
     icon: FileCode,
   },
-  png: {
-    label: 'PNG',
-    color: 'text-pink-500',
-    bgLight: 'bg-pink-100',
-    bgDark: 'dark:bg-pink-900/30',
-    icon: FileImage,
-  },
-  jpg: {
-    label: 'JPG',
-    color: 'text-pink-500',
-    bgLight: 'bg-pink-100',
-    bgDark: 'dark:bg-pink-900/30',
-    icon: FileImage,
-  },
-  jpeg: {
-    label: 'JPEG',
-    color: 'text-pink-500',
-    bgLight: 'bg-pink-100',
-    bgDark: 'dark:bg-pink-900/30',
-    icon: FileImage,
-  },
-  gif: {
-    label: 'GIF',
-    color: 'text-pink-500',
-    bgLight: 'bg-pink-100',
-    bgDark: 'dark:bg-pink-900/30',
-    icon: FileImage,
+  csv: {
+    label: 'CSV',
+    color: 'text-teal-500',
+    bgLight: 'bg-teal-100',
+    bgDark: 'dark:bg-teal-900/30',
+    icon: FileSpreadsheet,
   },
 }
 
@@ -137,12 +122,10 @@ export const ACCEPTED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
   'text/markdown',
-  'image/png',
-  'image/jpeg',
-  'image/gif',
+  'text/csv',
 ]
 
-export const MAX_FILE_SIZE = 50 * 1024 * 1024
+export const MAX_FILE_SIZE = 100 * 1024 * 1024
 
 export type DocumentStatus = 'processed' | 'pending' | 'failed' | 'processing'
 
