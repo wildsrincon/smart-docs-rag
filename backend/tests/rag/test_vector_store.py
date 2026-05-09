@@ -4,7 +4,7 @@ import pytest
 from uuid import uuid4
 from typing import List
 
-from app.rag.vector_store import VectorStore
+from app.rag.vector_store import VectorStore, _sanitize_text_for_postgres
 from app.entities.chunk import Chunk
 from app.core.config import settings
 
@@ -397,4 +397,8 @@ class TestVectorStore:
     def test_vector_store_default_dimension(self):
         """Test vector store default embedding dimension"""
         vector_store = VectorStore()
-        assert vector_store.embedding_dimension == 1536
+        assert vector_store.embedding_dimension == settings.EMBEDDING_DIMENSION
+
+    def test_sanitize_text_for_postgres_removes_nul_bytes(self):
+        """PostgreSQL text columns reject NUL characters from extracted PDFs."""
+        assert _sanitize_text_for_postgres("hello\x00 world") == "hello world"

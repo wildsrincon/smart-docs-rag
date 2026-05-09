@@ -41,7 +41,7 @@ api.interceptors.response.use(
 )
 
 export const documentsApi = {
-  upload: async (file: File) => {
+  upload: async (file: File, onProgress?: (progress: number) => void) => {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -53,7 +53,7 @@ export const documentsApi = {
         const progress = progressEvent.total
           ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
           : 0
-        console.log(`Upload progress: ${progress}%`)
+        onProgress?.(progress)
       },
     })
     return response.data

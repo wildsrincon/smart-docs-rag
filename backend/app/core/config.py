@@ -46,22 +46,25 @@ class Settings(BaseSettings):
     ZHIPUAI_EMBEDDING_MODEL: str = "embedding-3"
     ZHIPUAI_CHAT_MODEL: str = "glm-4.5"
 
-    # Google Gemini Configuration
+    # Google Gemini Configuration (chat LLM / OAuth only; embeddings use Voyage)
     GOOGLE_AI_API_KEY: str = ""
     GEMINI_CHAT_MODEL: str = "gemini-2.1-flash"
-    GOOGLE_EMBEDDING_MODEL: str = "models/text-embedding-004"
 
     # LLM Provider: "gemini" | "zhipuai" | "openai" (default: auto-detect)
     LLM_PROVIDER: str = ""
 
-    # Voyage AI Configuration (embeddings) — optional fallback
+    # Voyage AI Configuration (document + query embeddings)
     VOYAGE_API_KEY: str = ""
     VOYAGE_BASE_URL: str = "https://api.voyageai.com/v1/"
     VOYAGE_EMBEDDING_MODEL: str = "voyage-4-lite"
 
-    # Embedding Provider: "google" | "voyage" | "zhipuai" | "openai" (default: auto-detect)
+    # Embedding Provider: "voyage" | "zhipuai" | "openai" (default: auto-detect)
     EMBEDDING_PROVIDER: str = ""
-    EMBEDDING_DIMENSION: int = 768
+    EMBEDDING_DIMENSION: int = 512
+    EMBEDDING_BATCH_SIZE: int = 100
+    EMBEDDING_MAX_RETRIES: int = 5
+    EMBEDDING_RETRY_BASE_SECONDS: float = 2.0
+    EMBEDDING_RETRY_MAX_SECONDS: float = 60.0
 
     @property
     def is_voyage_ai(self) -> bool:
@@ -108,14 +111,12 @@ class Settings(BaseSettings):
             return self.ZHIPUAI_CHAT_MODEL
         return self.OPENAI_CHAT_MODEL
 
-    # --- Embedding configuration (Google > Voyage AI > ZhipuAI > OpenAI) ---
+    # --- Embedding configuration (Voyage AI > ZhipuAI > OpenAI) ---
 
     @property
     def embedding_provider(self) -> str:
         if self.EMBEDDING_PROVIDER:
             return self.EMBEDDING_PROVIDER.lower()
-        if self.GOOGLE_AI_API_KEY:
-            return "google"
         if self.VOYAGE_API_KEY:
             return "voyage"
         if self.ZHIPUAI_API_KEY:
@@ -125,8 +126,6 @@ class Settings(BaseSettings):
     @property
     def embedding_api_key(self) -> str:
         provider = self.embedding_provider
-        if provider == "google":
-            return self.GOOGLE_AI_API_KEY
         if provider == "voyage":
             return self.VOYAGE_API_KEY
         if provider == "zhipuai":
@@ -136,8 +135,6 @@ class Settings(BaseSettings):
     @property
     def embedding_base_url(self) -> str | None:
         provider = self.embedding_provider
-        if provider == "google":
-            return None
         if provider == "voyage":
             return self.VOYAGE_BASE_URL
         if provider == "zhipuai":
@@ -149,8 +146,6 @@ class Settings(BaseSettings):
     @property
     def embedding_model(self) -> str:
         provider = self.embedding_provider
-        if provider == "google":
-            return self.GOOGLE_EMBEDDING_MODEL
         if provider == "voyage":
             return self.VOYAGE_EMBEDDING_MODEL
         if provider == "zhipuai":
@@ -183,7 +178,7 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.2
 
     # Document Processing
-    MAX_FILE_SIZE_MB: int = 10
+    MAX_FILE_SIZE_MB: int = 100
     SUPPORTED_FILE_EXTENSIONS: str = "pdf,docx,xlsx,xls,pptx,txt,md,csv"
 
     # Rate Limiting

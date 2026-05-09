@@ -1,5 +1,7 @@
 """Custom pgvector wrapper for RAG platform"""
 
+import ast
+import json
 import logging
 from typing import List, Optional
 from uuid import UUID
@@ -7,10 +9,16 @@ from uuid import UUID
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.entities.chunk import Chunk
-from app.rag.chunker import Chunker
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_text_for_postgres(text: str) -> str:
+    """Remove characters PostgreSQL text columns cannot store."""
+
+    return text.replace("\x00", "")
 
 
 def _to_pgvector_literal(embedding: List[float], dim: int) -> str:
@@ -27,7 +35,9 @@ def _to_pgvector_literal(embedding: List[float], dim: int) -> str:
 class VectorStore:
     """Custom pgvector wrapper for RAG platform"""
 
-    def __init__(self, embedding_dimension: int = 768):
+    def __init__(self, embedding_dimension: int | None = None):
+        if embedding_dimension is None:
+            embedding_dimension = settings.EMBEDDING_DIMENSION
         self.embedding_dimension = embedding_dimension
 
     async def similarity_search(
@@ -45,7 +55,7 @@ class VectorStore:
         Args:
             db: Async database session
             user_id: User UUID for isolation (security)
-            query_embedding: Query vector (768 dimensions for text-embedding-004)
+            query_embedding: Query vector matching settings.EMBEDDING_DIMENSION
             limit: Number of results to return
             document_ids: Optional filter for specific documents
             threshold: Optional similarity threshold (0-1)
@@ -107,15 +117,45 @@ class VectorStore:
             List of created Chunk entities
         """
         try:
+            def serialize_metadata(metadata: object) -> str:
+                if metadata is None:
+                    return "{}"
+
+                if isinstance(metadata, dict):
+                    return json.dumps(metadata)
+
+                if isinstance(metadata, str):
+                    try:
+                        parsed = json.loads(metadata)
+                    except json.JSONDecodeError:
+                        try:
+                            parsed = ast.literal_eval(metadata)
+                        except (ValueError, SyntaxError):
+                            logger.warning(
+                                "Invalid chunk metadata string; storing empty JSON object"
+                            )
+                            return "{}"
+
+                    if isinstance(parsed, dict):
+                        return json.dumps(parsed)
+
+                    logger.warning(
+                        "Chunk metadata string did not contain a JSON object; "
+                        "storing empty JSON object"
+                    )
+                    return "{}"
+
+                return json.dumps(metadata)
+
             chunk_entities = [
                 Chunk(
                     document_id=doc_id,
                     user_id=user_id,
-                    content=content,
+                    content=_sanitize_text_for_postgres(content),
                     embedding=embedding,
                     chunk_index=idx,
                     token_count=token_count,
-                    metadata=metadata,
+                    chunk_metadata=serialize_metadata(metadata),
                 )
                 for doc_id, user_id, content, embedding, idx, token_count, metadata in chunks
             ]
