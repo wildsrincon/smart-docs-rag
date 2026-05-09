@@ -1,7 +1,8 @@
 """RAG chat service for query processing and answer generation"""
 
-import logging
+import ast
 import json
+import logging
 from typing import List, Optional, AsyncIterator
 from uuid import UUID
 from datetime import datetime, timezone
@@ -9,10 +10,10 @@ from datetime import datetime, timezone
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.rag.embedding_config import build_embeddings_client
 from app.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -28,19 +29,7 @@ class ChatService:
 
     @staticmethod
     def _build_embeddings():
-        provider = settings.embedding_provider
-        if provider == "google":
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-            return GoogleGenerativeAIEmbeddings(
-                model=settings.GOOGLE_EMBEDDING_MODEL,
-                google_api_key=settings.GOOGLE_AI_API_KEY,
-                output_dimensionality=settings.EMBEDDING_DIMENSION,
-            )
-        return AsyncOpenAI(
-            api_key=settings.embedding_api_key,
-            base_url=settings.embedding_base_url,
-        )
+        return build_embeddings_client()
 
     @staticmethod
     def _build_chat_llm() -> BaseChatModel:
@@ -67,19 +56,15 @@ class ChatService:
     async def generate_query_embedding(self, query: str) -> List[float]:
         """Generate embedding for a user query."""
         try:
-            provider = settings.embedding_provider
-            if provider == "google":
-                embedding = await self._embeddings.aembed_query(query)
-            else:
-                response = await self._embeddings.embeddings.create(
-                    model=settings.embedding_model,
-                    input=query,
-                    extra_body={
-                        "input_type": "query",
-                        "output_dimension": settings.EMBEDDING_DIMENSION,
-                    },
-                )
-                embedding = response.data[0].embedding
+            response = await self._embeddings.embeddings.create(
+                model=settings.embedding_model,
+                input=query,
+                extra_body={
+                    "input_type": "query",
+                    "output_dimension": settings.EMBEDDING_DIMENSION,
+                },
+            )
+            embedding = response.data[0].embedding
 
             if not isinstance(embedding, list):
                 raise ValueError(
@@ -122,18 +107,23 @@ class ChatService:
                 threshold=settings.SIMILARITY_THRESHOLD,
             )
 
-            # Format chunks for context assembly
-            formatted_chunks = [
-                {
-                    "content": chunk.content,
-                    "document_id": str(chunk.document_id),
-                    "chunk_index": chunk.chunk_index,
-                    "metadata": json.loads(chunk.chunk_metadata)
-                    if chunk.chunk_metadata
-                    else {},
-                }
-                for chunk in chunks
-            ]
+            # Format chunks for context assembly. Metadata is best-effort: legacy
+            # rows may contain Python repr strings (single quotes), but malformed
+            # metadata must never break chat retrieval or citation generation.
+            formatted_chunks = []
+            for chunk in chunks:
+                formatted_chunks.append(
+                    {
+                        "content": chunk.content,
+                        "document_id": str(chunk.document_id),
+                        "chunk_index": chunk.chunk_index,
+                        "metadata": self._parse_chunk_metadata(
+                            chunk.chunk_metadata,
+                            chunk_id=str(chunk.id),
+                            chunk_index=chunk.chunk_index,
+                        ),
+                    }
+                )
 
             logger.info(f"Retrieved {len(formatted_chunks)} relevant chunks")
             return formatted_chunks
@@ -141,6 +131,59 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error retrieving chunks: {e}")
             raise
+
+    @staticmethod
+    def _parse_chunk_metadata(
+        raw_metadata: object,
+        *,
+        chunk_id: str | None = None,
+        chunk_index: int | None = None,
+    ) -> dict:
+        """Parse chunk metadata without letting invalid rows break chat.
+
+        New rows are stored as JSON strings. Some legacy rows were stored using
+        Python dict repr (for example: ``{'filename': 'doc.pdf'}``), so we support
+        a safe literal fallback while continuing to degrade malformed values to an
+        empty metadata object.
+        """
+
+        if raw_metadata is None or raw_metadata == "":
+            return {}
+
+        if isinstance(raw_metadata, dict):
+            return raw_metadata
+
+        if not isinstance(raw_metadata, str):
+            logger.warning(
+                "Invalid chunk metadata type for chunk_id=%s chunk_index=%s: %s",
+                chunk_id,
+                chunk_index,
+                type(raw_metadata).__name__,
+            )
+            return {}
+
+        try:
+            parsed = json.loads(raw_metadata)
+        except json.JSONDecodeError:
+            try:
+                parsed = ast.literal_eval(raw_metadata)
+            except (ValueError, SyntaxError):
+                logger.warning(
+                    "Invalid chunk metadata for chunk_id=%s chunk_index=%s; ignoring metadata",
+                    chunk_id,
+                    chunk_index,
+                )
+                return {}
+
+        if isinstance(parsed, dict):
+            return parsed
+
+        logger.warning(
+            "Chunk metadata is not an object for chunk_id=%s chunk_index=%s; ignoring metadata",
+            chunk_id,
+            chunk_index,
+        )
+        return {}
 
     async def _fetch_document_names(
         self, db: AsyncSession, document_ids: List[str]

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, String, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
+from app.core.config import settings
 from ..database.base import Base
 
 
@@ -20,7 +21,7 @@ class Chunk(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(768))  # Google text-embedding-004 dimension (768)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSION))
     chunk_index = Column(Integer, nullable=False)
     token_count = Column(Integer)
     chunk_metadata = Column(Text)  # JSON string (page number, section, etc.)

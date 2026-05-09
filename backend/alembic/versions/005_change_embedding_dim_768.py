@@ -4,7 +4,7 @@ Revision ID: 005_change_embedding_dim_768
 Revises: 004_change_embedding_dim_2048
 Create Date: 2026-04-18
 
-Switched from VoyageAI (512d) to Google text-embedding-004 (768d).
+Changed the historical embedding column dimension to 768d.
 Existing embeddings are invalidated (set to NULL) since dimensions changed.
 Re-ingest documents after applying this migration.
 """
